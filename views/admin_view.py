@@ -24,7 +24,21 @@ def render_admin_portal():
     for r in records:
         # Determine status color
         status = r['status'].upper()
-        status_icon = "🟢" if status == "EVALUATED" else "🟡"
+        
+        # LOGIC: 
+        # 1. If evaluated -> Green
+        # 2. If interviewing but has no verdict -> Yellow (Active)
+        # 3. We can't perfectly know 'abandoned' without a timer, 
+        #    but we can visually flag INTERVIEWING as Red if the Admin deems it stagnant.
+        #    Let's make EVALUATED = Green, and INTERVIEWING = Red/Yellow alert.
+        
+        if status == "EVALUATED":
+            status_icon = "🟢"
+        elif not r['final_verdict_json'] and status == "INTERVIEWING":
+            # If they are stuck in interviewing without a verdict, show Red to signal "Incomplete/Abandoned"
+            status_icon = "🔴"
+        else:
+            status_icon = "🟡"
         
         with st.expander(f"{status_icon} {r['first_name']} {r['last_name']} — {r['program']}"):
             
@@ -60,7 +74,7 @@ def render_admin_portal():
                 else:
                     st.write("No chat history available.")
 
-            # --- TAB 3: SYSTEM AUDIT LOGS (The Old Sidebar) ---
+            # --- TAB 3: SYSTEM AUDIT LOGS ---
             with tab3:
                 st.subheader("System Timeline & Internal Reasoning")
                 if r['audit_logs_json']:
@@ -85,13 +99,13 @@ def render_admin_portal():
                     
                     # High-level metrics
                     col1, col2 = st.columns(2)
-                    col1.metric("Overall Score", f"{verdict.get('overall_score', 0)}/10")
+                    col1.metric("Overall Score", f"{verdict.get('final_cognitive_score', 0)}/10")
                     col2.metric("Recommendation", verdict.get('overall_recommendation', 'N/A'))
                     
                     # Full JSON
                     st.json(verdict)
                     
-                    # PDF Download Button (Extracting BLOB from DB)
+                    # PDF Download Button
                     if r.get('pdf_blob'):
                         st.divider()
                         safe_last_name = r.get('last_name', 'Candidate')
@@ -105,8 +119,5 @@ def render_admin_portal():
                             key=f"dl_{r['candidate_id']}",
                             use_container_width=True
                         )
-                    else:
-                        st.warning("PDF report not found in the database.")
-                        
                 else:
-                    st.warning("Applicant has not yet completed the evaluation phase.")
+                    st.error("🛑 Applicant abandoned the assessment midway or has not finished. This results in an automatic system rejection.")

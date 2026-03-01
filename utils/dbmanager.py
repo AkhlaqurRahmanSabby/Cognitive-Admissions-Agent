@@ -52,13 +52,17 @@ class DatabaseManager:
             return False, "Username already exists. Please choose another."
 
     def verify_login(self, username, password):
-        """Checks if the username and password match."""
+        """Checks if the username and password match, providing specific error messages."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
         result = cursor.fetchone()
-        if result and result[0] == password:
-            return True
-        return False
+        
+        if not result:
+            return False, "Username not found. Please click 'Create Account' to register."
+        if result[0] == password:
+            return True, "Login successful!"
+            
+        return False, "Incorrect password. Please try again."
     
 
     def get_application_by_username(self, username):

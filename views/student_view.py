@@ -45,17 +45,18 @@ def render_student_portal():
                 if not log_user or not log_pass:
                     st.warning("Please enter both username and password.")
                 else:
-                    is_valid = st.session_state.db.verify_login(log_user, log_pass)
+                    # Now it expects two values back (success boolean, and the message)
+                    is_valid, message = st.session_state.db.verify_login(log_user, log_pass)
                     
                     if is_valid:
                         st.session_state.student_logged_in = True
                         st.session_state.username = log_user
-                        st.success("Login successful!")
+                        st.success(message)
                         handle_login_routing(log_user) # Route based on history
                         time.sleep(1)
                         st.rerun()
                     else:
-                        st.error("Invalid username or password.")
+                        st.error(message) # This will now specifically say "Username not found" or "Incorrect password"
                 
         # --- REGISTRATION LOGIC ---
         with tab2:
@@ -209,10 +210,14 @@ def render_student_portal():
                 st.markdown(msg[1])
                 if len(msg) == 3 and msg[2]: st.audio(msg[2])
 
-        if "last_processed_audio" not in st.session_state: st.session_state.last_processed_audio = None
+        if "last_processed_audio" not in st.session_state: 
+            st.session_state.last_processed_audio = None
+            
+        if "is_processing" not in st.session_state:
+            st.session_state.is_processing = False
 
-        audio_input = st.audio_input("🎤 Speak (Optional)", key=f"mic_{len(st.session_state.chat_display)}")
-        text_input = st.chat_input("Type response...")
+        audio_input = st.audio_input("🎤 Speak (Optional)", key=f"mic_{len(st.session_state.chat_display)}", disabled=st.session_state.is_processing)
+        text_input = st.chat_input("Type response...", disabled=st.session_state.is_processing)
 
         user_input = text_input
         if audio_input and audio_input != st.session_state.last_processed_audio:
@@ -220,9 +225,14 @@ def render_student_portal():
                 user_input = st.session_state.audio_processor.transcribe_audio(audio_input.getvalue())
                 st.session_state.last_processed_audio = audio_input
 
-        if user_input:
+        if user_input and not st.session_state.is_processing:
+            st.session_state.is_processing = True 
+            
             st.session_state.chat_display.append(("user", user_input))
             st.session_state.audit_logs.append({"icon": "👤", "label": "User", "content": user_input, "is_json": False, "time": time.strftime("%H:%M:%S")})
+
+            with st.chat_message("user"):
+                st.markdown(user_input)
 
             with st.spinner("Analyzing..."):
                 res = st.session_state.interview_engine.generate_response(user_input)
@@ -233,6 +243,9 @@ def render_student_portal():
                 st.session_state.chat_display.append(("assistant", ai_text, ai_audio))
                 
                 st.session_state.db.sync_to_db(st.session_state.candidate_id, st.session_state.chat_display, st.session_state.audit_logs)
+
+                # Unlock UI for the next turn
+                st.session_state.is_processing = False 
 
                 if res.get("is_complete"):
                     st.session_state.phase = "evaluation"
