@@ -1,6 +1,6 @@
 import json
 import time
-from ai_client import client
+from .ai_client import client
 
 class InterviewEngine:
     def __init__(self, user_data, transcript_report):

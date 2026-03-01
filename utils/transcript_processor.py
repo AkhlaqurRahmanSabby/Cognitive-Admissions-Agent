@@ -1,7 +1,7 @@
 import pdfplumber
 import json
 import io
-from ai_client import client
+from core.ai_client import client
 
 # Thresholds
 MIN_OVERALL_CGPA = 3.0

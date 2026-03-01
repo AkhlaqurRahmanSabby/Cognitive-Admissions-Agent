@@ -1,5 +1,5 @@
 import json
-from ai_client import client
+from .ai_client import client
 
 class EvaluationEngine:
     def __init__(self, transcript_report, interview_history, user_data):
