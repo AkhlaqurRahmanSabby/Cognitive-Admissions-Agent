@@ -1,6 +1,7 @@
 import streamlit as st
 from views.student_view import render_student_portal
 from views.admin_view import render_admin_portal
+from views.referee_view import render_referee_portal
 from utils import DatabaseManager, AudioProcessor
 
 st.set_page_config(page_title="AI Admissions Platform", page_icon="🎓", layout="wide", initial_sidebar_state="collapsed")
@@ -28,7 +29,7 @@ with st.sidebar:
     with st.expander("🔐 Portal Access", expanded=False):
         st.markdown("Select your role to route to the correct interface.")
         
-        user_role = st.radio("Select View:", ["Student Applicant", "School Admin"])
+        user_role = st.radio("Select View:", ["Student Applicant", "Referee", "School Admin"])
         
         st.divider()
         
@@ -47,6 +48,9 @@ with st.sidebar:
 # Based on the sidebar selection, render the correct isolated file
 if user_role == "Student Applicant":
     render_student_portal()
+
+elif user_role == "Referee":
+    render_referee_portal()
 
 elif user_role == "School Admin":
     render_admin_portal()

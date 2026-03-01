@@ -16,7 +16,7 @@ def render_admin_portal():
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Applications", len(records))
     c2.metric("Evaluated (Complete)", len([r for r in records if r['status'] == 'evaluated']))
-    c3.metric("In Progress", len([r for r in records if r['status'] == 'interviewing']))
+    c3.metric("In Progress", len([r for r in records if r['status'] in ['interviewing', 'pending_references']]))
     
     st.divider()
 
@@ -25,17 +25,11 @@ def render_admin_portal():
         # Determine status color
         status = r['status'].upper()
         
-        # LOGIC: 
-        # 1. If evaluated -> Green
-        # 2. If interviewing but has no verdict -> Yellow (Active)
-        # 3. We can't perfectly know 'abandoned' without a timer, 
-        #    but we can visually flag INTERVIEWING as Red if the Admin deems it stagnant.
-        #    Let's make EVALUATED = Green, and INTERVIEWING = Red/Yellow alert.
-        
         if status == "EVALUATED":
             status_icon = "🟢"
+        elif status == "PENDING_REFERENCES":
+            status_icon = "⏳"
         elif not r['final_verdict_json'] and status == "INTERVIEWING":
-            # If they are stuck in interviewing without a verdict, show Red to signal "Incomplete/Abandoned"
             status_icon = "🔴"
         else:
             status_icon = "🟡"
@@ -43,13 +37,14 @@ def render_admin_portal():
         with st.expander(f"{status_icon} {r['first_name']} {r['last_name']} — {r['program']}"):
             
             # Basic Info Header
-            st.caption(f"**Application ID:** `{r['candidate_id']}` | **Applied:** {r['created_at']} | **User:** `{r['username']}`")
+            st.caption(f"**Application ID:** `{r['candidate_id']}` | **Applied:** {r['created_at']} | **User:** `{r['username']}` | **Status:** `{status}`")
             
             # Create Tabs for deep-diving into the student profile
-            tab1, tab2, tab3, tab4 = st.tabs([
+            tab1, tab2, tab3, tab4, tab5 = st.tabs([
                 "📄 Overview & Transcript", 
                 "💬 Interview Chat", 
                 "🧠 AI Audit Logs", 
+                "🤝 Reference Checks",
                 "⚖️ Final Verdict & PDF"
             ])
             
@@ -81,9 +76,9 @@ def render_admin_portal():
                     logs = json.loads(r['audit_logs_json'])
                     if not logs:
                         st.write("No logs recorded.")
-                    for log in logs: # Chronological order
+                    for log in logs: 
                         with st.container(border=True):
-                            st.markdown(f"**{log['icon']} {log['label']}** `({log['time']})`")
+                            st.markdown(f"**{log['icon']} {log['label']}** `({log.get('time', 'N/A')})`")
                             if log['is_json']:
                                 st.json(log['content'])
                             else:
@@ -91,8 +86,29 @@ def render_admin_portal():
                 else:
                     st.write("No audit logs available.")
 
-            # --- TAB 4: FINAL EVALUATION & PDF DOWNLOAD ---
+            # --- TAB 4: REFERENCE CHECKS ---
             with tab4:
+                st.subheader("Referee Endorsements")
+                references = st.session_state.db.get_references_by_candidate(r['candidate_id'])
+                
+                if not references:
+                    st.write("No references requested yet.")
+                else:
+                    for idx, ref in enumerate(references):
+                        with st.expander(f"Reference {idx+1}: {ref['referee_name']} ({ref['referee_designation']}) - Status: {ref['status'].upper()}"):
+                            st.write(f"**Email:** {ref['referee_email']}")
+                            if ref['chat_history_json']:
+                                ref_history = json.loads(ref['chat_history_json'])
+                                st.markdown("---")
+                                st.markdown("**AI Verification Transcript:**")
+                                for msg in ref_history:
+                                    with st.chat_message(msg['role']):
+                                        st.write(msg['content'])
+                            elif ref['status'] == 'pending':
+                                st.info("Waiting for referee to complete the interview.")
+
+            # --- TAB 5: FINAL EVALUATION & PDF DOWNLOAD ---
+            with tab5:
                 st.subheader("Final Committee Decision")
                 if r['final_verdict_json']:
                     verdict = json.loads(r['final_verdict_json'])
@@ -119,5 +135,7 @@ def render_admin_portal():
                             key=f"dl_{r['candidate_id']}",
                             use_container_width=True
                         )
+                elif status == "PENDING_REFERENCES":
+                    st.warning("Final verdict is pending reference checks.")
                 else:
                     st.error("🛑 Applicant abandoned the assessment midway or has not finished. This results in an automatic system rejection.")

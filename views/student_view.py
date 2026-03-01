@@ -1,8 +1,8 @@
 import streamlit as st
 import time
 import json
-from core import InterviewEngine, EvaluationEngine
-from utils import TranscriptProcessor, IELTSProcessor, generate_evaluation_pdf
+from core import InterviewEngine
+from utils import TranscriptProcessor, IELTSProcessor
 
 # --- REGIONAL DATA ---
 EXEMPT_COUNTRIES = ["Canada", "United States", "United Kingdom", "Ireland", "Germany", "France", "Netherlands", "Sweden", "Norway", "Denmark", "Finland", "Switzerland"]
@@ -18,6 +18,8 @@ def handle_login_routing(username):
     elif app_record['status'] == 'evaluated':
         st.session_state.phase = "completed"
         st.session_state.saved_verdict = json.loads(app_record['final_verdict_json'])
+    elif app_record['status'] == 'pending_references':
+        st.session_state.phase = "pending_references"
     else:
         # If the status is still 'interviewing' but they logged out/refreshed
         st.session_state.phase = "abandoned"
@@ -45,7 +47,6 @@ def render_student_portal():
                 if not log_user or not log_pass:
                     st.warning("Please enter both username and password.")
                 else:
-                    # Now it expects two values back (success boolean, and the message)
                     is_valid, message = st.session_state.db.verify_login(log_user, log_pass)
                     
                     if is_valid:
@@ -56,7 +57,7 @@ def render_student_portal():
                         time.sleep(1)
                         st.rerun()
                     else:
-                        st.error(message) # This will now specifically say "Username not found" or "Incorrect password"
+                        st.error(message) 
                 
         # --- REGISTRATION LOGIC ---
         with tab2:
@@ -77,7 +78,7 @@ def render_student_portal():
                         time.sleep(1)
                         st.rerun()
                     else:
-                        st.error(message) # Shows "Username already exists" if taken
+                        st.error(message) 
 
         return # Stop execution until logged in
 
@@ -118,7 +119,6 @@ def render_student_portal():
             ielts_file = st.file_uploader("Upload IELTS Result (Required if not exempt)", type=["pdf"])
 
             st.divider()
-            # 🔴 STRICT WARNING CHECKBOX
             st.warning("⚠️ **CRITICAL INSTRUCTIONS BEFORE PROCEEDING**")
             consent_checked = st.checkbox("I understand that once I begin the Cognitive Engine assessment, I cannot pause, refresh, or stop midway. Exiting the browser early will result in an automatic rejection.", value=False)
 
@@ -164,7 +164,6 @@ def render_student_portal():
         st.title("⚙️ Validating Credentials")
         with st.spinner("Reviewing your academic history..."):
             try:
-                # IELTS GATE
                 ielts_summary = "IELTS waived."
                 if not st.session_state.user_data["is_exempt"]:
                     ielts_processor = IELTSProcessor()
@@ -175,7 +174,6 @@ def render_student_portal():
                         st.stop()
                     ielts_summary = f"IELTS Cleared. Overall: {ielts_scores.get('overall')}."
 
-                # TRANSCRIPT PROCESS
                 tp = TranscriptProcessor()
                 raw_json = tp.extract_transcript_data(st.session_state.transcript_bytes)
                 st.session_state.audit_logs.append({"icon": "📄", "label": "OCR", "content": raw_json, "is_json": True, "time": time.strftime("%H:%M:%S")})
@@ -183,11 +181,15 @@ def render_student_portal():
                 report = tp.generate_transcript_report(raw_json, st.session_state.user_data)
                 st.session_state.transcript_report = report
                 st.session_state.audit_logs.append({"icon": "🧐", "label": "Registrar", "content": report, "is_json": False, "time": time.strftime("%H:%M:%S")})
-                
-                # --- DB SYNC: Create Record with Username ---
-                st.session_state.candidate_id = st.session_state.db.create_candidate_record(st.session_state.user_data, report, st.session_state.audit_logs)
 
-                # ENGINE START
+                st.session_state.candidate_id = st.session_state.db.create_candidate_record(
+                    st.session_state.user_data, 
+                    report, 
+                    st.session_state.audit_logs,
+                    st.session_state.transcript_bytes, 
+                    st.session_state.ielts_bytes       
+                )
+
                 st.session_state.interview_engine = InterviewEngine(st.session_state.user_data, report)
                 init_res = st.session_state.interview_engine.start_interview()
                 audio = st.session_state.audio_processor.generate_audio(init_res["question"])
@@ -244,51 +246,66 @@ def render_student_portal():
                 
                 st.session_state.db.sync_to_db(st.session_state.candidate_id, st.session_state.chat_display, st.session_state.audit_logs)
 
-                # Unlock UI for the next turn
                 st.session_state.is_processing = False 
 
                 if res.get("is_complete"):
-                    st.session_state.phase = "evaluation"
+                    st.session_state.phase = "references" # 🔴 ROUTE TO REFERENCES NOW
                 st.rerun()
 
     # ==========================================
-    # PHASE 4: EVALUATION
+    # PHASE 4: REFERENCES FORM
     # ==========================================
-    elif st.session_state.phase == "evaluation":
-        st.title("⚖️ Status Update")
-        with st.spinner("Consolidating reports..."):
-            hist = st.session_state.interview_engine.get_interview_data_for_evaluation()
-            evaluator = EvaluationEngine(st.session_state.transcript_report, hist, st.session_state.user_data)
-            
-            if "final_verdict" not in st.session_state:
-                st.session_state.final_verdict = evaluator.generate_final_scorecard()
-                st.session_state.applicant_letter = evaluator.generate_applicant_message(st.session_state.final_verdict)
-                st.session_state.audit_logs.append({"icon": "🏛️", "label": "Verdict", "content": st.session_state.final_verdict, "is_json": True, "time": time.strftime("%H:%M:%S")})
-                
-                # Generate the PDF to save to DB
-                pdf_bytes, c_id = generate_evaluation_pdf(st.session_state.user_data, st.session_state.final_verdict, st.session_state.audit_logs)
-                
-                # --- DB SYNC: Save Verdict AND PDF ---
-                st.session_state.db.update_final_verdict(st.session_state.candidate_id, st.session_state.final_verdict, st.session_state.audit_logs, pdf_bytes)
-
-        decision = st.session_state.final_verdict.get("overall_recommendation", "Error")
+    elif st.session_state.phase == "references":
+        st.title("📋 Required References")
+        st.success("Cognitive Assessment Complete! You have cleared the preliminary stage.")
+        st.markdown("To finalize your application, please provide three professional or academic references. The system will securely contact them for verification.")
         
-        if decision == "Admit":
-            st.success(f"**Decision: {decision}** 🎉")
-            st.balloons()
-        elif decision == "Conditional Admission":
-            st.warning(f"**Decision: {decision}** ⚠️")
-        else:
-            st.error(f"**Decision: {decision}** 🛑")
+        with st.form("reference_collection_form", border=True):
+            ref_data = []
+            for i in range(1, 2):
+                st.subheader(f"Reference {i}")
+                col1, col2, col3 = st.columns(3)
+                r_name = col1.text_input("Full Name", key=f"rname_{i}")
+                r_email = col2.text_input("Official Email", key=f"remail_{i}")
+                r_title = col3.text_input("Designation / Title", key=f"rtitle_{i}")
+                ref_data.append({"name": r_name, "email": r_email, "title": r_title})
+                
+            submit_refs = st.form_submit_button("Submit & Finalize Application", type="primary", use_container_width=True)
             
-        st.write("---") # Visual divider
+        if submit_refs:
+            # Quick Validation
+            if any(not r['name'] or not r['email'] or not r['title'] or "@" not in r['email'] for r in ref_data):
+                st.error("Please fill out all fields for all three references with valid email addresses.")
+            else:
+                with st.spinner("Registering references..."):
+                    # Create the requests in the DB
+                    for r in ref_data:
+                        st.session_state.db.create_reference_request(
+                            st.session_state.candidate_id, 
+                            r['email'], 
+                            r['name'], 
+                            r['title']
+                        )
+                    
+                    # Update Candidate Status
+                    st.session_state.db.update_candidate_status(st.session_state.candidate_id, "pending_references")
+                    st.session_state.phase = "pending_references"
+                    st.rerun()
 
-        with st.container(border=True):
-            st.subheader("Official Correspondence")
-            st.write(st.session_state.applicant_letter)
-            
-        st.write("")
-        if st.button("Log Out & Finish", use_container_width=True):
+    # ==========================================
+    # PHASE 5: PENDING REFERENCES
+    # ==========================================
+    elif st.session_state.phase == "pending_references":
+        st.title("⏳ Decision Pending")
+        st.info("Your application is currently paused pending reference verification.")
+        st.markdown("""
+        We have dispatched requests to your listed references. They have up to **7 business days** to securely submit their endorsements via the Referee Portal.
+        
+        Once all references are received and processed by our Verification Engine, the committee debate will conclude and your final status will automatically update here.
+        """)
+        
+        st.divider()
+        if st.button("Log Out", use_container_width=True):
             st.session_state.clear()
             st.rerun()
 
@@ -309,7 +326,45 @@ def render_student_portal():
         else:
             st.error(f"**Final Status: {decision}** 🛑")
             
-        st.markdown("Your official evaluation is on file with the admissions office. You may log out.")
+        st.divider()
+        
+        with st.container(border=True):
+            st.subheader("Official Correspondence")
+            
+            if decision == "Reject":
+                # Find the weakest area to give constructive feedback (ignoring references)
+                sub_scores = verdict.get("sub_scores", {})
+                if isinstance(sub_scores, str):
+                    try:
+                        sub_scores = json.loads(sub_scores)
+                    except:
+                        sub_scores = {}
+                
+                safe_scores = {k: v for k, v in sub_scores.items() if k != 'references' and isinstance(v, (int, float))}
+                
+                feedback_phrase = "foundational technical and academic skills" # Default fallback
+                if safe_scores:
+                    weakest_trait = min(safe_scores, key=safe_scores.get)
+                    area_map = {
+                        "technical": "technical methodologies and problem-solving framework",
+                        "motivation": "articulating a highly specific research focus",
+                        "trajectory": "alignment between your past academic trajectory and future goals",
+                        "transcript": "academic fundamentals relevant to this rigorous program"
+                    }
+                    feedback_phrase = area_map.get(weakest_trait, feedback_phrase)
+
+                st.write(f"Thank you for taking the time to apply and complete our rigorous assessment process. While we recognize your efforts and potential, we are unable to offer you admission at this time. To strengthen future applications, we recommend continuing to develop your {feedback_phrase}. We wish you the absolute best in your future academic endeavors.")
+            
+            elif decision == "Admit":
+                st.write("Congratulations! We are thrilled to offer you admission. Your combined assessment results prove you will be an exceptional addition to our academic community.")
+            
+            else:
+                st.write("Thank you for your application. We are pleased to offer you Conditional Admission. You demonstrated strong potential, but this offer is contingent upon completing specific foundational bridge courses to fully align your background with our program's academic rigor.")
+
+        st.write("")
+        if st.button("Log Out", use_container_width=True):
+            st.session_state.clear()
+            st.rerun()
 
     # ==========================================
     # EDGE CASE 2: ABANDONED MIDWAY

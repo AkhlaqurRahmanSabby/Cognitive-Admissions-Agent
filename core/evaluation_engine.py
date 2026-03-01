@@ -2,10 +2,11 @@ import json
 from .ai_client import client
 
 class EvaluationEngine:
-    def __init__(self, transcript_report, interview_history, user_data):
+    def __init__(self, transcript_report, interview_history, user_data, reference_data=None):
         self.transcript_report = transcript_report
         self.interview_history = interview_history
         self.user_data = user_data
+        self.reference_data = reference_data or [] # List of referee chat transcripts
         
         # Extract the final rubric state from the interviewer to see what was actually completed
         self.final_interview_state = self._extract_final_state()
@@ -39,7 +40,7 @@ class EvaluationEngine:
             return {"score": 0, "critique": f"Evaluation Error: {str(e)}", "stance": "Error"}
 
     # ==========================================
-    # LAYER 1: THE FOUR SPECIALISTS (Untouched)
+    # LAYER 1: THE FIVE SPECIALISTS
     # ==========================================
     def _evaluate_motivation(self):
         role = "You are the Director of Research Admissions. Your only job is to evaluate 'Motivation & Focus'."
@@ -111,18 +112,35 @@ class EvaluationEngine:
         """
         return self._call_llm(role, task)
 
+    def _evaluate_references(self):
+        role = "You are the Reference Auditor. Your only job is to verify the candidate's claims against their professional endorsements."
+        task = f"""
+        Review the AI interview transcripts conducted with the candidate's professional/academic references.
+        
+        REFERENCE TRANSCRIPTS:
+        {json.dumps(self.reference_data)}
+        
+        RUBRIC (Score 1-10):
+        - 1-3: Referees expressed serious reservations, contradicted the candidate's claims, or could not speak to their abilities.
+        - 4-7: Standard, positive references but lacking specific examples of elite performance.
+        - 8-10: Glowing endorsements with highly specific, verified examples of the candidate solving complex problems.
+        
+        OUTPUT JSON: {{ "score": int, "critique": "1 sentence justification summarizing the consensus of all referees" }}
+        """
+        return self._call_llm(role, task)
+
     # ==========================================
     # LAYER 2: THE MULTI-AGENT COMMITTEE DEBATE
     # ==========================================
     def _agent_strict_professor(self, sub_scores):
         role = "You are the 'Strict Professor'. You are highly skeptical of candidates, especially those switching fields."
         task = f"""
-        Review the candidate's background, interview, and preliminary specialist scores.
+        Review the candidate's background, interview, and preliminary specialist scores (which now include Reference Checks).
         BACKGROUND: {self.transcript_report}
         INTERVIEW: {json.dumps(self.interview_history)}
         SCORES: {json.dumps(sub_scores)}
         
-        Your job is to find the FLAWS. If they are switching fields, point out their naive assumptions or lack of foundational prerequisites. If their technical score is low, argue why they will fail out of the program. Be ruthless but academic.
+        Your job is to find the FLAWS. Look closely at the 'references' score. Did the referees fail to back up the candidate's claims? If they are switching fields, point out their naive assumptions. Be ruthless but academic.
         
         OUTPUT JSON: {{ "stance": "A 2-sentence highly critical argument against admission." }}
         """
@@ -131,12 +149,12 @@ class EvaluationEngine:
     def _agent_visionary_dean(self, sub_scores):
         role = "You are the 'Visionary Dean'. You look for potential, grit, and interdisciplinary advantages."
         task = f"""
-        Review the candidate's background, interview, and preliminary specialist scores.
+        Review the candidate's background, interview, and preliminary specialist scores (which now include Reference Checks).
         BACKGROUND: {self.transcript_report}
         INTERVIEW: {json.dumps(self.interview_history)}
         SCORES: {json.dumps(sub_scores)}
         
-        Your job is to find the HIDDEN POTENTIAL. If they are switching fields, argue why their previous background gives them a unique, valuable perspective. If their technical score is lower but motivation is high, argue why they are worth taking a risk on.
+        Your job is to find the HIDDEN POTENTIAL. Look closely at the 'references' score. Did the referees highlight exceptional grit or adaptability? Argue why they are worth taking a risk on.
         
         OUTPUT JSON: {{ "stance": "A 2-sentence highly supportive argument for admission, focusing on adaptability and unique perspective." }}
         """
@@ -153,15 +171,17 @@ class EvaluationEngine:
         traj_eval = self._evaluate_trajectory()
         tech_eval = self._evaluate_technical()
         trans_eval = self._evaluate_transcript()
+        ref_eval = self._evaluate_references()
         
         sub_scores = {
             "motivation": focus_eval.get('score', 0),
             "trajectory": traj_eval.get('score', 0),
             "technical": tech_eval.get('score', 0),
-            "transcript": trans_eval.get('score', 0)
+            "transcript": trans_eval.get('score', 0),
+            "references": ref_eval.get('score', 0)
         }
         
-        avg_score = sum(sub_scores.values()) / 4.0
+        avg_score = sum(sub_scores.values()) / 5.0
 
         # 2. Trigger the Committee Debate
         prof_critique = self._agent_strict_professor(sub_scores)
@@ -173,10 +193,11 @@ class EvaluationEngine:
         You have received the data for {self.user_data.get('name')}.
         
         SPECIALIST SCORES (Average: {avg_score}/10):
-        1. Motivation: {focus_eval.get('score')} - {focus_eval.get('critique')}
-        2. Trajectory: {traj_eval.get('score')} - {traj_eval.get('critique')}
-        3. Technical: {tech_eval.get('score')} - {tech_eval.get('critique')}
-        4. Transcript: {trans_eval.get('score')} - {trans_eval.get('critique')}
+        1. Motivation: {sub_scores['motivation']} - {focus_eval.get('critique')}
+        2. Trajectory: {sub_scores['trajectory']} - {traj_eval.get('critique')}
+        3. Technical: {sub_scores['technical']} - {tech_eval.get('critique')}
+        4. Transcript: {sub_scores['transcript']} - {trans_eval.get('critique')}
+        5. References: {sub_scores['references']} - {ref_eval.get('critique')}
         
         THE DEBATE:
         - Strict Professor's Argument: {prof_critique.get('stance')}
@@ -184,8 +205,9 @@ class EvaluationEngine:
         
         DECISION RULES:
         - OVERALL AVERAGE < 5: "Reject"
+        - ANY INDIVIDUAL SCORE <= 3: "Reject" (If References are 3 or below, it's an automatic fail).
         - If the candidate is switching fields (High Trajectory, Low Technical), and the Visionary Dean's argument is compelling: Override the technical gap and issue "Conditional Admission" with required bridge courses.
-        - If the Strict Professor correctly identifies a fatal flaw (e.g., zero motivation AND zero technical skill): "Reject".
+        - If the Strict Professor correctly identifies a fatal flaw (e.g., terrible references or zero technical skill): "Reject".
         - AVERAGE > 7.5 and no scores below 5: "Admit"
 
         OUTPUT JSON:
