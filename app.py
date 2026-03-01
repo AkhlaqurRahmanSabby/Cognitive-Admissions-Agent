@@ -4,7 +4,7 @@ from views.admin_view import render_admin_portal
 from views.referee_view import render_referee_portal
 from utils import DatabaseManager, AudioProcessor
 
-st.set_page_config(page_title="AI Admissions Platform", page_icon="🎓", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Cognitive Admissions Agent", page_icon="🎓", layout="wide", initial_sidebar_state="collapsed")
 
 
 # --- GLOBAL SESSION STATE INITIALIZATION ---
