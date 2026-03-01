@@ -1,7 +1,7 @@
 import streamlit as st
 import time
 from core import InterviewEngine, EvaluationEngine
-from utils import TranscriptProcessor, IELTSProcessor, generate_evaluation_pdf
+from utils import TranscriptProcessor, IELTSProcessor, generate_evaluation_pdf, AudioProcessor
 
 # --- SESSION STATE INITIALIZATION ---
 if "phase" not in st.session_state:
@@ -16,6 +16,8 @@ if "chat_display" not in st.session_state:
     st.session_state.chat_display = []
 if "audit_logs" not in st.session_state:
     st.session_state.audit_logs = []
+if "audio_processor" not in st.session_state:
+    st.session_state.audio_processor = AudioProcessor()
 
 st.set_page_config(page_title="AI Admissions Portal", page_icon="🎓", layout="centered")
 
@@ -62,13 +64,13 @@ if st.session_state.phase == "intake":
     st.markdown("Welcome. Please provide your academic background to begin the cognitive assessment.")
     st.divider()
 
-    with st.container():
+    with st.form("intake_form", border=False):
         st.subheader("Candidate Information")
         name_col1, name_col2 = st.columns(2)
         with name_col1:
-            first_name = st.text_input("First Name", placeholder="e.g., Jane")
+            first_name = st.text_input("First Name", placeholder="e.g., Jane", autocomplete="given-name")
         with name_col2:
-            last_name = st.text_input("Last Name", placeholder="e.g., Doe")
+            last_name = st.text_input("Last Name", placeholder="e.g., Doe", autocomplete="family-name")
 
         col1, col2 = st.columns(2)
         with col1:
@@ -82,21 +84,18 @@ if st.session_state.phase == "intake":
         with col4:
             previous_degree = st.text_input("Previous Degree Earned", placeholder="e.g., BSc Mathematics")
 
-    st.divider()
-
-    with st.container():
+        st.divider()
         st.subheader("Required Documents")
         st.markdown("Please upload your documents in **PDF format** only.")
         transcript_file = st.file_uploader("Upload Official Transcript (Required)", type=["pdf"])
         
-        # Dynamic IELTS Label based on citizenship
-        is_exempt = citizenship in EXEMPT_COUNTRIES
-        ielts_label = "Upload IELTS Result (Optional for your region)" if is_exempt else "Upload IELTS Result (Required)"
-        ielts_file = st.file_uploader(ielts_label, type=["pdf"])
+        ielts_file = st.file_uploader("Upload IELTS Result (Required if not from an exempt country)", type=["pdf"])
 
-    st.write("") 
+        st.write("") 
+        submitted = st.form_submit_button("Initialize Assessment Engine", type="primary", use_container_width=True)
 
-    if st.button("Initialize Assessment Engine", type="primary", use_container_width=True, key="init_btn"):
+    # Process the form ONLY when submitted
+    if submitted:
         errors = []
         if not first_name: errors.append("First Name")
         if not last_name: errors.append("Last Name")
@@ -105,8 +104,10 @@ if st.session_state.phase == "intake":
         if alma_mater == "Select a university...": errors.append("Previous University")
         if not transcript_file: errors.append("Transcript PDF")
 
+        is_exempt = citizenship in EXEMPT_COUNTRIES
         if not is_exempt and not ielts_file:
             st.error("🛑 An IELTS result is strictly required for applicants from your country.")
+            errors.append("IELTS Result")
 
         if errors:
             st.error(f"🛑 Missing Required Fields: {', '.join(errors)}")
@@ -206,7 +207,8 @@ elif st.session_state.phase == "processing":
             )
             
             initial_response = st.session_state.interview_engine.start_interview()
-            st.session_state.chat_display.append(("assistant", initial_response["question"]))
+            initial_audio_bytes = st.session_state.audio_processor.generate_audio(initial_response["question"])
+            st.session_state.chat_display.append(("assistant", initial_response["question"], initial_audio_bytes))
             
             st.session_state.phase = "interview"
             st.rerun()
@@ -224,15 +226,48 @@ elif st.session_state.phase == "interview":
     st.title("🎙️ Admissions Interview")
     st.success(f"Credentials verified. Welcome, {st.session_state.user_data['first_name']}. The assessment will now begin.")
     
-    for role, content in st.session_state.chat_display:
+    # Render existing chat history (Now supports audio playback)
+    for i, msg in enumerate(st.session_state.chat_display):
+        role = msg[0]
+        content = msg[1]
+        
         with st.chat_message(role):
             st.markdown(content)
+            # If the AI has an audio file attached, render the player
+            if len(msg) == 3 and msg[2]:
+                st.audio(msg[2], format="audio/mp3")
 
-    if user_input := st.chat_input("Type your response here..."):
+    # --- INPUT SECTION (AUDIO OR TEXT) ---
+    if "last_processed_audio" not in st.session_state:
+        st.session_state.last_processed_audio = None
+
+    current_turn = len(st.session_state.chat_display)
+    audio_input = st.audio_input("🎤 Speak your response (Optional)", key=f"mic_turn_{current_turn}")
+    
+    text_input = st.chat_input("Type your response here...")
+
+    # Determine which input the candidate used
+    user_input = None
+    if text_input:
+        user_input = text_input
+
+    elif audio_input is not None and audio_input != st.session_state.last_processed_audio:
+        with st.spinner("Transcribing your voice..."):
+            user_input = st.session_state.audio_processor.transcribe_audio(audio_input.getvalue())
+            st.session_state.last_processed_audio = audio_input
+            
+            if user_input:
+                st.toast("🎤 Audio transcribed successfully!")
+            else:
+                st.error("Failed to hear audio clearly. Please try typing.")
+
+    # --- PROCESS THE INPUT ---
+    if user_input:
         st.session_state.chat_display.append(("user", user_input))
         with st.chat_message("user"):
             st.markdown(user_input)
 
+        # Log user response
         st.session_state.audit_logs.append({
             "icon": "👤",
             "label": f"Candidate Response (Turn {len(st.session_state.chat_display)})",
@@ -241,8 +276,14 @@ elif st.session_state.phase == "interview":
             "time": time.strftime("%H:%M:%S")
         })
 
-        with st.spinner("Analyzing response..."):
+        # Generate and show AI response
+        with st.spinner("Analyzing response and generating voice..."):
             engine_response = st.session_state.interview_engine.generate_response(user_input)
+            ai_text = engine_response["question"]
+            
+            # --- Generate AI Voice ---
+            ai_audio_bytes = st.session_state.audio_processor.generate_audio(ai_text)
+            
             st.session_state.audit_logs.append({
                 "icon": "🧠",
                 "label": f"Interviewer Reasoning (Turn {len(st.session_state.chat_display)})",
@@ -253,8 +294,9 @@ elif st.session_state.phase == "interview":
                 "is_json": True,
                 "time": time.strftime("%H:%M:%S")
             })
-            st.session_state.chat_display.append(("assistant", engine_response["question"]))
+            st.session_state.chat_display.append(("assistant", ai_text, ai_audio_bytes))
             
+            # Check if interview is over
             if engine_response.get("is_complete", False):
                 st.session_state.audit_logs.append({
                     "icon": "✅",
