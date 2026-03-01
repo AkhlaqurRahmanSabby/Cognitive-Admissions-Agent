@@ -1,12 +1,7 @@
 import streamlit as st
 import time
-
-# --- ACTUAL BACKEND IMPORTS ---
-from transcript_processor import extract_transcript_data, generate_transcript_report
-from ielts_processor import extract_ielts_scores, check_ielts_threshold
-from interview_engine import InterviewEngine
-from evaluation_engine import EvaluationEngine
-from report_generator import generate_evaluation_pdf
+from core import InterviewEngine, EvaluationEngine
+from utils import TranscriptProcessor, generate_evaluation_pdf, extract_ielts_scores, check_ielts_threshold, extract_transcript_data, generate_transcript_report
 
 # --- SESSION STATE INITIALIZATION ---
 if "phase" not in st.session_state:
