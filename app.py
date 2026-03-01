@@ -1,7 +1,7 @@
 import streamlit as st
 import time
 from core import InterviewEngine, EvaluationEngine
-from utils import TranscriptProcessor, generate_evaluation_pdf, extract_ielts_scores, check_ielts_threshold, extract_transcript_data, generate_transcript_report
+from utils import TranscriptProcessor, IELTSProcessor, generate_evaluation_pdf
 
 # --- SESSION STATE INITIALIZATION ---
 if "phase" not in st.session_state:
@@ -141,8 +141,9 @@ elif st.session_state.phase == "processing":
             ielts_summary = "IELTS waived based on North American/European citizenship."
             if not st.session_state.user_data["is_exempt"]:
                 if st.session_state.ielts_bytes:
-                    ielts_scores = extract_ielts_scores(st.session_state.ielts_bytes)
-                    passed, failed_bands = check_ielts_threshold(ielts_scores)
+                    ielts_processor = IELTSProcessor()
+                    ielts_scores = ielts_processor.extract_ielts_scores(st.session_state.ielts_bytes)
+                    passed, failed_bands = ielts_processor.check_ielts_threshold(ielts_scores)
                     
                     if not passed:
                         st.error(f"🛑 **AUTOMATIC REJECTION:** Minimum language proficiency not met.")
@@ -160,7 +161,8 @@ elif st.session_state.phase == "processing":
                     st.stop()
 
             # --- TRANSCRIPT PROCESSING ---
-            parsed_transcript_json = extract_transcript_data(st.session_state.transcript_bytes)
+            transcript_processor = TranscriptProcessor()
+            parsed_transcript_json = transcript_processor.extract_transcript_data(st.session_state.transcript_bytes)
             if not parsed_transcript_json:
                 st.error("Failed to parse transcript. Please ensure the PDF is readable.")
                 st.stop()
@@ -173,7 +175,7 @@ elif st.session_state.phase == "processing":
                 "time": time.strftime("%H:%M:%S")
             })
                 
-            transcript_summary = generate_transcript_report(parsed_transcript_json, st.session_state.user_data)
+            transcript_summary = transcript_processor.generate_transcript_report(parsed_transcript_json, st.session_state.user_data)
             st.session_state.audit_logs.append({
                 "icon": "🧐",
                 "label": "Registrar's Analytical Opinion",
