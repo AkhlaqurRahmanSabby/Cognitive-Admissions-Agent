@@ -3,7 +3,7 @@ from views.student_view import render_student_portal
 from views.admin_view import render_admin_portal
 from utils import DatabaseManager, AudioProcessor
 
-st.set_page_config(page_title="AI Admissions Platform", page_icon="🎓", layout="wide")
+st.set_page_config(page_title="AI Admissions Platform", page_icon="🎓", layout="wide", initial_sidebar_state="collapsed")
 
 
 # --- GLOBAL SESSION STATE INITIALIZATION ---
@@ -25,21 +25,21 @@ if "audit_logs" not in st.session_state:
 # MASTER ROUTER & ACCESS CONTROL
 # ==========================================
 with st.sidebar:
-    st.title("🔐 Portal Access")
-    st.markdown("Select your role to route to the correct interface.")
-    
-    user_role = st.radio("Select View:", ["Student Applicant", "School Admin"])
-    
-    st.divider()
-    
-    # --- ADMIN SECURITY GATE ---
-    if user_role == "School Admin":
-        pwd = st.text_input("Admin Password", type="password", help="Hint: wealthsimple2026")
-        if pwd != "wealthsimple2026":
-            st.warning("🔒 Please enter the correct admin password to access the Command Center.")
-            st.stop() # Stops the rest of the app from loading until password is correct
-        else:
-            st.success("Access Granted.")
+    with st.expander("🔐 Portal Access", expanded=False):
+        st.markdown("Select your role to route to the correct interface.")
+        
+        user_role = st.radio("Select View:", ["Student Applicant", "School Admin"])
+        
+        st.divider()
+        
+        # --- ADMIN SECURITY GATE ---
+        if user_role == "School Admin":
+            pwd = st.text_input("Admin Password", type="password", help="Hint: wealthsimple2026")
+            if pwd != "wealthsimple2026":
+                st.warning("🔒 Please enter the correct admin password to access the Command Center.")
+                st.stop() # Stops the rest of the app from loading until password is correct
+            else:
+                st.success("Access Granted.")
 
 # ==========================================
 # VIEW DISPATCHER
