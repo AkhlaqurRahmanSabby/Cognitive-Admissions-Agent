@@ -6,6 +6,22 @@ University admissions is a legacy batch-processing workflow constrained by human
 
 The prototype tests whether AI can take on real cognitive and operational responsibility, conducting structured interviews, probing reasoning in real time, and producing credible, verifiable evaluation reports, while humans safely retain responsibility for final judgment.
 
+---
+
+## ⚖️ Human / AI Responsibility Boundary
+
+### **Capability Unlock**
+
+Admissions officers can now verify baseline competence and detect inconsistencies between a candidate’s transcript, interview responses, and referee testimony across thousands of applicants, a process previously limited by hours of manual review per file.
+
+### **Critical Human Decision**
+
+The final admission decision must remain human because it involves cohort-level tradeoffs, balancing diversity of background, risk tolerance, and institutional strategy, that cannot be ethically or operationally delegated to an AI evaluating candidates in isolation.
+
+While the system can assess individual readiness and surface risks, only a human administrator can determine whether a high-variance or non-traditional candidate aligns with the institution’s broader goals for a given year.
+
+---
+
 ## 🏗️ The Architecture
 
 This platform shifts away from "AI-as-a-wrapper" and utilizes a **Multi-Agent Evaluation Pipeline** combined with a robust **Human-in-the-Loop (HITL)** architecture.
