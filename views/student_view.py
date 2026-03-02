@@ -17,15 +17,19 @@ def handle_login_routing(username):
         st.session_state.phase = "intake"
     elif app_record['status'] in ['evaluated', 'admit', 'reject', 'conditional']:
         st.session_state.phase = "completed"
-        st.session_state.final_status = app_record['status'] # Save the Admin's DB status
+        st.session_state.final_status = app_record['status']
         if app_record.get('final_verdict_json'):
             st.session_state.saved_verdict = json.loads(app_record['final_verdict_json'])
         else:
             st.session_state.saved_verdict = {}
     elif app_record['status'] == 'pending_references':
         st.session_state.phase = "pending_references"
+    elif app_record['status'] == 'collecting_references':
+        # Restore the candidate ID so the reference form knows who they are!
+        st.session_state.candidate_id = app_record['candidate_id'] 
+        st.session_state.phase = "references"
     else:
-        # If the status is still 'interviewing' but they logged out/refreshed
+        # If the status is still 'interviewing'
         st.session_state.phase = "abandoned"
 
 def render_student_portal():
@@ -267,6 +271,7 @@ def render_student_portal():
                     
                     # Route to references if done, otherwise rerun to unlock the text box
                     if res.get("is_complete"):
+                        st.session_state.db.update_candidate_status(st.session_state.candidate_id, "collecting_references")
                         st.session_state.phase = "references"
                     
                     st.rerun()
