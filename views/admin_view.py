@@ -3,7 +3,7 @@ import json
 
 def render_admin_portal():
     st.title("🏛️ Admissions Command Center")
-    st.markdown("Review AI-prepared dossiers and make final admissions decisions.")
+    st.markdown("Review AI-prepared application files and make final admissions decisions.")
 
     # Fetch all records
     records = st.session_state.db.get_all_candidates()
@@ -18,7 +18,7 @@ def render_admin_portal():
     evaluated_count = len([r for r in records if r['status'] == 'evaluated']) # Pending Admin review
     admitted_count = len([r for r in records if r['status'] == 'admit'])
     rejected_count = len([r for r in records if r['status'] == 'reject'])
-    in_progress = len([r for r in records if r['status'] in ['interviewing', 'pending_references']])
+    in_progress = len([r for r in records if r['status'] in ['interviewing', 'pending_references', 'collecting_references']])
     
     seats_left = PROGRAM_CAPACITY - admitted_count
 
@@ -27,25 +27,37 @@ def render_admin_portal():
     c1.metric("Decisions Pending", evaluated_count, delta="Action Required", delta_color="inverse")
     c2.metric("Seats Remaining", seats_left, f"Out of {PROGRAM_CAPACITY}")
     c3.metric("Total Admitted", admitted_count)
-    c4.metric("In Progress (AI Stage)", in_progress)
+    c4.metric("In Progress", in_progress)
     
     st.divider()
 
     # --- CANDIDATE LIST ---
-    st.subheader("Applicant Dossiers")
+    st.subheader("Applicant Profiles")
     for r in records:
-        status = r['status'].upper()
+        raw_status = r['status']
         
-        # Determine status color & icon
-        if status == "EVALUATED":
-            status_icon, color = "🟡", "orange" # Ready for Admin
-        elif status == "ADMIT":
+        # Translate database strings to human-readable labels
+        status_map = {
+            "evaluated": "Ready for Review",
+            "admit": "Admitted",
+            "reject": "Rejected",
+            "conditional": "Conditional Admit",
+            "pending_references": "Pending References",
+            "collecting_references": "Collecting References",
+            "interviewing": "Interview in Progress"
+        }
+        display_status = status_map.get(raw_status, raw_status.replace('_', ' ').title())
+        
+        # Determine status color & icon based on raw status
+        if raw_status == "evaluated":
+            status_icon, color = "🟡", "orange" 
+        elif raw_status == "admit":
             status_icon, color = "🟢", "green"
-        elif status == "REJECT":
+        elif raw_status == "reject":
             status_icon, color = "🔴", "red"
-        elif status == "CONDITIONAL":
+        elif raw_status == "conditional":
             status_icon, color = "🔵", "blue"
-        elif status == "PENDING_REFERENCES":
+        elif raw_status in ["pending_references", "collecting_references"]:
             status_icon, color = "⏳", "gray"
         else:
             status_icon, color = "⚪", "gray"
@@ -56,10 +68,10 @@ def render_admin_portal():
             try: user_data = json.loads(r['user_data_json'])
             except: pass
 
-        with st.expander(f"{status_icon} {r['first_name']} {r['last_name']} — {r['program']} (Status: {status})"):
+        with st.expander(f"{status_icon} {r['first_name']} {r['last_name']} — {r['program']} (Status: {display_status})"):
             st.caption(f"**App ID:** `{r['candidate_id']}` | **Applied:** {r['created_at']} | **User:** `{r['username']}`")
             
-            tab1, tab2, tab3, tab4, tab5 = st.tabs(["📄 Profile & Transcript", "💬 Interview", "🧠 AI Logs", "🤝 References", "⚖️ Executive Dossier & Decision"])
+            tab1, tab2, tab3, tab4, tab5 = st.tabs(["📄 Profile & Transcript", "💬 Interview", "🧠 AI Logs", "🤝 References", "⚖️ Executive Summary & Decision"])
             
             # --- TAB 1: PROFILE & TRANSCRIPT ---
             with tab1:
@@ -113,12 +125,12 @@ def render_admin_portal():
                                 st.info("Invitation sent. Waiting for referee.")
                 else: st.write("No references requested yet.")
 
-            # --- TAB 5: THE NEW EXECUTIVE DOSSIER & FINAL DECISION ---
+            # --- TAB 5: THE NEW EXECUTIVE SUMMARY & FINAL DECISION ---
             with tab5:
-                if status in ["EVALUATED", "ADMIT", "REJECT", "CONDITIONAL"] and r['final_verdict_json']:
+                if raw_status in ["evaluated", "admit", "reject", "conditional"] and r['final_verdict_json']:
                     verdict = json.loads(r['final_verdict_json'])
                     
-                    st.subheader("AI Committee Executive Dossier")
+                    st.subheader("AI Committee Executive Summary")
                     st.info(f"**AI Recommendation:** {verdict.get('overall_recommendation', 'N/A')}")
                     
                     # 1. The Full Picture (Chair Summary)
@@ -152,9 +164,9 @@ def render_admin_portal():
                     st.divider()
 
                     # 4. OFFICIAL HUMAN OVERRIDE / FINAL DECISION
-                    if status == "EVALUATED":
+                    if raw_status == "evaluated":
                         st.markdown("### ⚖️ Official Administrative Action")
-                        st.markdown("Please review the dossier above. This action is final and will instantly update the student's portal.")
+                        st.markdown("Please review the application file above. This action is final and will instantly update the student's portal.")
                         
                         btn1, btn2, btn3 = st.columns(3)
                         with btn1:
@@ -170,7 +182,7 @@ def render_admin_portal():
                                 st.session_state.db.update_admin_decision(r['candidate_id'], "reject")
                                 st.rerun()
                     else:
-                        st.success(f"### Final Administrative Decision Logged: {status}")
+                        st.success(f"### Final Administrative Decision Logged: {display_status}")
                 
-                elif status == "PENDING_REFERENCES":
-                    st.warning("Dossier generation is paused pending completion of all reference checks.")
+                elif raw_status in ["pending_references", "collecting_references"]:
+                    st.warning("Evaluation generation is paused pending completion of all reference checks.")
