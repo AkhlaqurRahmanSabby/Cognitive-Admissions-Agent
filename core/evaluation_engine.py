@@ -246,7 +246,9 @@ class EvaluationEngine:
                 "Program Alignment Director": "**Score: {sub_scores['trajectory']}/10** - {traj_eval.get('detailed_analysis')} *(Proof: \"{traj_eval.get('direct_quote')}\")*",
                 "Technical SME": "**Score: {sub_scores['technical']}/10** - {tech_eval.get('detailed_analysis')} *(Proof: \"{tech_eval.get('direct_quote')}\")*",
                 "Academic Auditor": "**Score: {sub_scores['transcript']}/10** - {trans_eval.get('detailed_analysis')} *(Proof: \"{trans_eval.get('direct_quote')}\")*",
-                "Reference Cross-Checker": "**Score: {sub_scores['references']}/10** - {ref_eval.get('detailed_analysis')} *(Proof: \"{ref_eval.get('direct_quote')}\")*"
+                "Reference Cross-Checker": "**Score: {sub_scores['references']}/10** - {ref_eval.get('detailed_analysis')} *(Proof: \"{ref_eval.get('direct_quote')}\")*",
+            "system_confidence_score": "Percentage 0-100 indicating how confident the AI is in this assessment based on the clarity of the interview.",
+            "risk_and_anomalies": ["List any contradictions, highly adversarial references, or areas where the candidate's dialect/communication style may have confused the AI.", "If none, output 'No anomalies detected.'"],
             }}
         }}
         """

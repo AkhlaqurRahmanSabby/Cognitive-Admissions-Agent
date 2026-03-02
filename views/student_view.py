@@ -15,7 +15,7 @@ def handle_login_routing(username):
     
     if not app_record:
         st.session_state.phase = "intake"
-    elif app_record['status'] in ['evaluated', 'admit', 'reject', 'conditional']:
+    elif app_record['status'] in ['evaluated', 'admit', 'reject', 'conditional', 'human_review_required']:
         st.session_state.phase = "completed"
         st.session_state.final_status = app_record['status']
         if app_record.get('final_verdict_json'):
@@ -362,6 +362,13 @@ def render_student_portal():
             with st.container(border=True):
                 st.subheader("Official Correspondence")
                 st.write("Thank you for your application. We are pleased to offer you Conditional Admission. You demonstrated strong potential, but this offer is contingent upon completing specific foundational bridge courses to fully align your background with our program's academic rigor.")
+
+        elif db_status == "human_review_required":
+            st.info("**Final Status: Manual Review Required** 📞")
+            with st.container(border=True):
+                st.subheader("Official Correspondence")
+                st.write("Your cognitive assessment and application file have been reviewed by our system. The Admissions Committee has requested a standard follow-up interview with a human faculty member to further discuss your research vision.")
+                st.write("**Next Step:** An admissions coordinator will contact you via email within 48 hours to schedule your interview.")
 
         st.divider()
         if st.button("Log Out", use_container_width=True):

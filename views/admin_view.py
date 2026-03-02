@@ -42,6 +42,7 @@ def render_admin_portal():
             "admit": "Admitted",
             "reject": "Rejected",
             "conditional": "Conditional Admit",
+            "human_review_required": "Human Interview Required",
             "pending_references": "Pending References",
             "collecting_references": "Collecting References",
             "interviewing": "Interview in Progress"
@@ -57,6 +58,8 @@ def render_admin_portal():
             status_icon, color = "🔴", "red"
         elif raw_status == "conditional":
             status_icon, color = "🔵", "blue"
+        elif raw_status == "human_review_required":
+            status_icon, color = "📞", "purple"
         elif raw_status in ["pending_references", "collecting_references"]:
             status_icon, color = "⏳", "gray"
         else:
@@ -92,7 +95,7 @@ def render_admin_portal():
                 st.divider()
 
                 # 2. Middle: Executive Summary
-                if raw_status in ["evaluated", "admit", "reject", "conditional"] and r['final_verdict_json']:
+                if raw_status in ["evaluated", "admit", "reject", "conditional", "human_review_required"] and r['final_verdict_json']:
                     verdict = json.loads(r['final_verdict_json'])
                     
                     st.subheader("AI Committee Executive Summary")
@@ -124,23 +127,47 @@ def render_admin_portal():
                     
                     st.divider()
 
+                    # RISK & GOVERNANCE SECTION ---
+                    st.markdown("### 🛡️ System Confidence & Risk Audit")
+                    confidence = verdict.get('system_confidence_score', 'N/A')
+                    
+                    # Highlight low confidence
+                    if isinstance(confidence, (int, float)) and confidence < 80:
+                        st.warning(f"**System Confidence:** {confidence}% - Human audit highly recommended.")
+                    else:
+                        st.success(f"**System Confidence:** {confidence}%")
+
+                    anomalies = verdict.get('risk_and_anomalies', [])
+                    if anomalies and anomalies[0] != 'No anomalies detected.':
+                        st.error("**⚠️ Anomalies & Flags Detected:**")
+                        for anomaly in anomalies:
+                            st.markdown(f"- {anomaly}")
+                    else:
+                        st.info("No adversarial inputs or data anomalies detected.")
+
+                    st.divider()
+
                     # 3. Bottom: OFFICIAL HUMAN OVERRIDE / FINAL DECISION
                     if raw_status == "evaluated":
                         st.markdown("### ⚖️ Official Administrative Action")
-                        st.markdown("Please review the application file above. This action is final and will instantly update the student's portal.")
+                        st.markdown("As the human-in-the-loop, you assume final responsibility for this decision.")
                         
-                        btn1, btn2, btn3 = st.columns(3)
+                        btn1, btn2, btn3, btn4 = st.columns(4)
                         with btn1:
-                            if st.button("✅ Admit Candidate", key=f"admit_{r['candidate_id']}", use_container_width=True, type="primary"):
+                            if st.button("✅ Admit", key=f"admit_{r['candidate_id']}", use_container_width=True, type="primary"):
                                 st.session_state.db.update_admin_decision(r['candidate_id'], "admit")
                                 st.rerun()
                         with btn2:
-                            if st.button("⚠️ Conditional Admit", key=f"cond_{r['candidate_id']}", use_container_width=True):
+                            if st.button("⚠️ Conditional", key=f"cond_{r['candidate_id']}", use_container_width=True):
                                 st.session_state.db.update_admin_decision(r['candidate_id'], "conditional")
                                 st.rerun()
                         with btn3:
-                            if st.button("🛑 Reject Candidate", key=f"rej_{r['candidate_id']}", use_container_width=True):
+                            if st.button("🛑 Reject", key=f"rej_{r['candidate_id']}", use_container_width=True):
                                 st.session_state.db.update_admin_decision(r['candidate_id'], "reject")
+                                st.rerun()
+                        with btn4:
+                            if st.button("📞 Manual Review", key=f"appeal_{r['candidate_id']}", use_container_width=True):
+                                st.session_state.db.update_admin_decision(r['candidate_id'], "human_review_required")
                                 st.rerun()
                     else:
                         st.success(f"### Final Administrative Decision Logged: {display_status}")
