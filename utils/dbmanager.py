@@ -148,6 +148,15 @@ class DatabaseManager:
                 WHERE candidate_id = ?
             """, (json.dumps(final_verdict), json.dumps(audit_logs), pdf_bytes, candidate_id))
 
+    def update_admin_decision(self, candidate_id, final_status):
+        """Saves the human Admin's final admissions decision."""
+        with self.conn:
+            self.conn.execute("""
+                UPDATE candidates 
+                SET status = ? 
+                WHERE candidate_id = ?
+            """, (final_status, candidate_id))
+
     def update_candidate_status(self, candidate_id, status):
         """Allows us to set a student to 'pending_references' without a final verdict yet."""
         with self.conn:
