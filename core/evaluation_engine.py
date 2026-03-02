@@ -45,7 +45,7 @@ class EvaluationEngine:
     def _evaluate_motivation(self):
         role = "You are the Director of Research Admissions. Your only job is to evaluate 'Motivation & Focus'."
         task = f"""
-        Review this interview history.
+        Review this interview history. Look specifically for how the candidate articulates their driving thesis.
         INTERVIEW STATUS FOR THIS ITEM: {self.final_interview_state.get('motivation_and_focus', 'unknown')}
         
         RUBRIC (Score 1-10):
@@ -55,7 +55,12 @@ class EvaluationEngine:
         
         HISTORY: {json.dumps(self.interview_history)}
         
-        OUTPUT JSON: {{ "score": int, "critique": "1 sentence justification" }}
+        OUTPUT JSON: 
+        {{ 
+            "score": int, 
+            "detailed_analysis": "A robust 4-5 sentence paragraph evaluating their motivation.",
+            "direct_quote": "Extract 1 exact, verbatim quote from the candidate that proves your score."
+        }}
         """
         return self._call_llm(role, task)
 
@@ -69,18 +74,23 @@ class EvaluationEngine:
         RUBRIC (Score 1-10):
         - 1-3: Unexplained pivot, or passive reliance on the school ("I'll just take your classes").
         - 4-7: Logical progression, but surface-level connections to past work.
-        - 8-10: Brilliant synthesis. They proved how their past (even if a different field) creates a unique advantage for their future.
+        - 8-10: Brilliant synthesis. They proved how their past creates a unique advantage for their future.
         
         HISTORY: {json.dumps(self.interview_history)}
         
-        OUTPUT JSON: {{ "score": int, "critique": "1 sentence justification" }}
+        OUTPUT JSON: 
+        {{ 
+            "score": int, 
+            "detailed_analysis": "A robust 4-5 sentence paragraph evaluating their trajectory and fit.",
+            "direct_quote": "Extract 1 exact, verbatim quote from the candidate that proves your score."
+        }}
         """
         return self._call_llm(role, task)
 
     def _evaluate_technical(self):
         role = "You are a Tenured Professor. Your only job is to evaluate 'Technical & Methodological Depth'."
         task = f"""
-        Review this interview history. Look for the 'stress test' question.
+        Review this interview history. Look for the 'stress test' or scenario question.
         INTERVIEW STATUS FOR THIS ITEM: {self.final_interview_state.get('technical_depth', 'unknown')}
         
         RUBRIC (Score 1-10):
@@ -90,30 +100,40 @@ class EvaluationEngine:
         
         HISTORY: {json.dumps(self.interview_history)}
         
-        OUTPUT JSON: {{ "score": int, "critique": "1 sentence justification" }}
+        OUTPUT JSON: 
+        {{ 
+            "score": int, 
+            "detailed_analysis": "A robust 4-5 sentence paragraph evaluating their technical depth.",
+            "direct_quote": "Extract 1 exact, verbatim quote from the candidate demonstrating their reasoning."
+        }}
         """
         return self._call_llm(role, task)
 
     def _evaluate_transcript(self):
         role = "You are the Admissions Auditor. Your only job is to evaluate 'Transcript Validation'."
         task = f"""
-        Review this interview history alongside their transcript.
+        Review this interview history alongside their transcript. Look for discussions of specific grades or gaps.
         BACKGROUND: {self.transcript_report}
         INTERVIEW STATUS FOR THIS ITEM: {self.final_interview_state.get('transcript_validation', 'unknown')}
         
         RUBRIC (Score 1-10):
         - 1-3: Could not explain a grade, or gave generic "I studied hard" answers.
         - 4-7: Adequately explained a class project or challenge.
-        - 8-10: Provided deep, verifiable evidence of their learning strategy (e.g., active recall, building from scratch) that matches their high grades.
+        - 8-10: Provided deep, verifiable evidence of their learning strategy that matches their high grades.
         
         HISTORY: {json.dumps(self.interview_history)}
         
-        OUTPUT JSON: {{ "score": int, "critique": "1 sentence justification" }}
+        OUTPUT JSON: 
+        {{ 
+            "score": int, 
+            "detailed_analysis": "A robust 4-5 sentence paragraph evaluating their academic foundation.",
+            "direct_quote": "Extract 1 exact, verbatim quote from the candidate proving their claims."
+        }}
         """
         return self._call_llm(role, task)
 
     def _evaluate_references(self):
-        role = "You are the Reference Auditor. Your only job is to verify the candidate's claims against their professional endorsements."
+        role = "You are the Reference Auditor. Your only job is to verify candidate claims against professional endorsements."
         task = f"""
         Review the AI interview transcripts conducted with the candidate's professional/academic references.
         
@@ -121,11 +141,16 @@ class EvaluationEngine:
         {json.dumps(self.reference_data)}
         
         RUBRIC (Score 1-10):
-        - 1-3: Referees expressed serious reservations, contradicted the candidate's claims, or could not speak to their abilities.
+        - 1-3: Referees expressed serious reservations, contradicted claims, or could not speak to their abilities.
         - 4-7: Standard, positive references but lacking specific examples of elite performance.
         - 8-10: Glowing endorsements with highly specific, verified examples of the candidate solving complex problems.
         
-        OUTPUT JSON: {{ "score": int, "critique": "1 sentence justification summarizing the consensus of all referees" }}
+        OUTPUT JSON: 
+        {{ 
+            "score": int, 
+            "detailed_analysis": "A robust 3-4 sentence paragraph summarizing the consensus and specifics of all referees.",
+            "direct_quote": "Extract 1 exact, verbatim quote from one of the referees that best represents the consensus."
+        }}
         """
         return self._call_llm(role, task)
 
@@ -166,7 +191,7 @@ class EvaluationEngine:
     def generate_final_scorecard(self):
         """Orchestrates the specialists, the debate, and makes the final decision."""
         
-        # 1. Gather Sub-Scores
+        # 1. Gather Sub-Scores & Verifiable Receipts
         focus_eval = self._evaluate_motivation()
         traj_eval = self._evaluate_trajectory()
         tech_eval = self._evaluate_technical()
@@ -187,84 +212,43 @@ class EvaluationEngine:
         prof_critique = self._agent_strict_professor(sub_scores)
         dean_critique = self._agent_visionary_dean(sub_scores)
 
-        # 3. The Final Decision (The "Committee Chair")
-        role = "You are the Chair of Graduate Admissions. You must synthesize the specialist scores and the committee debate into a final decision."
+        # 3. The Final Decision (The "Department Chair")
+        role = "You are the Chair of Graduate Admissions. You must synthesize the verifiable specialist data and the committee debate into a final Executive Summary."
         task = f"""
-        You have received the data for {self.user_data.get('name')}.
+        You are finalizing the application file for {self.user_data.get('name')}.
         
-        SPECIALIST SCORES (Average: {avg_score}/10):
-        1. Motivation: {sub_scores['motivation']} - {focus_eval.get('critique')}
-        2. Trajectory: {sub_scores['trajectory']} - {traj_eval.get('critique')}
-        3. Technical: {sub_scores['technical']} - {tech_eval.get('critique')}
-        4. Transcript: {sub_scores['transcript']} - {trans_eval.get('critique')}
-        5. References: {sub_scores['references']} - {ref_eval.get('critique')}
+        SPECIALIST VERIFICATIONS (Average: {avg_score}/10):
+        1. Behavioral Psychologist (Vision): {sub_scores['motivation']}/10 - {focus_eval.get('detailed_analysis')} | Quote: "{focus_eval.get('direct_quote')}"
+        2. Program Alignment Director: {sub_scores['trajectory']}/10 - {traj_eval.get('detailed_analysis')} | Quote: "{traj_eval.get('direct_quote')}"
+        3. Technical SME: {sub_scores['technical']}/10 - {tech_eval.get('detailed_analysis')} | Quote: "{tech_eval.get('direct_quote')}"
+        4. Academic Auditor (Resilience): {sub_scores['transcript']}/10 - {trans_eval.get('detailed_analysis')} | Quote: "{trans_eval.get('direct_quote')}"
+        5. Reference Cross-Checker: {sub_scores['references']}/10 - {ref_eval.get('detailed_analysis')} | Quote: "{ref_eval.get('direct_quote')}"
         
         THE DEBATE:
-        - Strict Professor's Argument: {prof_critique.get('stance')}
-        - Visionary Dean's Argument: {dean_critique.get('stance')}
+        - Strict Professor's Stance: {prof_critique.get('stance')}
+        - Visionary Dean's Stance: {dean_critique.get('stance')}
         
         DECISION RULES:
         - OVERALL AVERAGE < 5: "Reject"
-        - ANY INDIVIDUAL SCORE <= 3: "Reject" (If References are 3 or below, it's an automatic fail).
-        - If the candidate is switching fields (High Trajectory, Low Technical), and the Visionary Dean's argument is compelling: Override the technical gap and issue "Conditional Admission" with required bridge courses.
+        - ANY INDIVIDUAL SCORE <= 1: "Reject" (If References are 1 or below, it's an automatic fail).
+        - If the candidate is switching fields (High Trajectory, Low Technical), and the Visionary Dean's argument is compelling: Override the technical gap and issue "Conditional Admit".
         - If the Strict Professor correctly identifies a fatal flaw (e.g., terrible references or zero technical skill): "Reject".
         - AVERAGE > 7.5 and no scores below 5: "Admit"
 
-        OUTPUT JSON:
+        OUTPUT JSON FORMAT:
         {{
-            "overall_recommendation": "Admit" | "Conditional Admission" | "Reject",
-            "chair_reasoning": "A 1-sentence explanation of exactly why you sided with either the Professor or the Dean based on the rules.",
-            "executive_summary": "A powerful 2-sentence summary weighing the candidate's profile.",
-            "final_cognitive_score": {avg_score},
-            "sub_scores": {json.dumps(sub_scores)},
-            "committee_debate": {{
-                "strict_professor_stance": {json.dumps(prof_critique.get('stance', ''))},
-                "visionary_dean_stance": {json.dumps(dean_critique.get('stance', ''))}
-            }},
-            "required_prerequisites": ["List of courses", "or null if Admit/Reject"],
-            "red_flags": "List any critical issues raised by the Strict Professor."
+            "overall_recommendation": "Admit" | "Conditional Admit" | "Reject",
+            "executive_summary": "A powerful 3-4 sentence summary from your perspective as the Chair. Weigh the candidate's core strengths, address the committee debate, and justify your final recommendation.",
+            "strengths": ["Bullet point 1", "Bullet point 2", "Bullet point 3"],
+            "weaknesses": ["Bullet point 1", "Bullet point 2", or None if none available],
+            "specialists": {{
+                "Behavioral Psychologist": "**Score: {sub_scores['motivation']}/10** - {focus_eval.get('detailed_analysis')} *(Proof: \"{focus_eval.get('direct_quote')}\")*",
+                "Program Alignment Director": "**Score: {sub_scores['trajectory']}/10** - {traj_eval.get('detailed_analysis')} *(Proof: \"{traj_eval.get('direct_quote')}\")*",
+                "Technical SME": "**Score: {sub_scores['technical']}/10** - {tech_eval.get('detailed_analysis')} *(Proof: \"{tech_eval.get('direct_quote')}\")*",
+                "Academic Auditor": "**Score: {sub_scores['transcript']}/10** - {trans_eval.get('detailed_analysis')} *(Proof: \"{trans_eval.get('direct_quote')}\")*",
+                "Reference Cross-Checker": "**Score: {sub_scores['references']}/10** - {ref_eval.get('detailed_analysis')} *(Proof: \"{ref_eval.get('direct_quote')}\")*"
+            }}
         }}
         """
         
         return self._call_llm(role, task)
-
-    def generate_applicant_message(self, final_verdict):
-        """
-        Translates the internal JSON verdict into a clean, 
-        concise paragraph for the applicant UI.
-        """
-        decision = final_verdict.get("overall_recommendation")
-        summary = final_verdict.get("executive_summary")
-        
-        # Accessing user_data from 'self'
-        candidate_name = self.user_data.get('first_name', 'Applicant') 
-        
-        role = "You are a Professional Admissions Counselor and Career Coach."
-        task = f"""
-        Based on the following internal committee decision, write a 3-sentence message to {candidate_name}.
-        
-        INTERNAL DECISION: {decision}
-        COMMITTEE SUMMARY: {summary}
-        
-        STRICT FORMATTING RULES:
-        1. DO NOT include "Dear [Name]", "Sincerely", or any sign-offs.
-        2. DO NOT include headers or subject lines.
-        3. START the message directly by addressing {candidate_name}.
-        4. ONLY return the plain text paragraph.
-        
-        CONTENT RULES:
-        - If REJECTED: Be professional and encouraging. Do not mention specific scores. Mention 'areas for further technical development'.
-        - If ADMITTED: Be celebratory and welcoming.
-        - If CONDITIONAL: Explain they have potential but need to complete specific bridges.
-        - Tone: Sophisticated, empathetic, and academic.
-        """
-        
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": role},
-                {"role": "user", "content": task}
-            ],
-            temperature=0.3
-        )
-        return response.choices[0].message.content

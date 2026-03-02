@@ -71,10 +71,12 @@ def render_admin_portal():
         with st.expander(f"{status_icon} {r['first_name']} {r['last_name']} — {r['program']} (Status: {display_status})"):
             st.caption(f"**App ID:** `{r['candidate_id']}` | **Applied:** {r['created_at']} | **User:** `{r['username']}`")
             
-            tab1, tab2, tab3, tab4, tab5 = st.tabs(["📄 Profile & Transcript", "💬 Interview", "🧠 AI Logs", "🤝 References", "⚖️ Executive Summary & Decision"])
+            # Restructured to 4 Tabs. Decision is now Tab 1.
+            tab1, tab2, tab3, tab4 = st.tabs(["⚖️ Executive Summary & Decision", "💬 Interview", "🤝 References", "🧠 AI Logs"])
             
-            # --- TAB 1: PROFILE & TRANSCRIPT ---
+            # --- TAB 1: PROFILE, SUMMARY & DECISION ---
             with tab1:
+                # 1. Top Bar: Student Profile
                 colA, colB = st.columns(2)
                 with colA:
                     st.markdown(f"**Citizenship:** {user_data.get('citizenship', 'N/A')}")
@@ -82,62 +84,22 @@ def render_admin_portal():
                 with colB:
                     st.markdown(f"**Alma Mater:** {user_data.get('alma_mater', 'N/A')}")
                     st.markdown(f"**IELTS Requirement:** {'Waived' if user_data.get('is_exempt') else 'Required'}")
+                
+                if r['transcript_report']: 
+                    with st.expander("📄 View Registrar Transcript Analysis"):
+                        st.info(r['transcript_report'])
+                
                 st.divider()
-                st.subheader("Registrar Analysis")
-                if r['transcript_report']: st.info(r['transcript_report'])
-                else: st.write("No transcript report generated yet.")
 
-            # --- TAB 2: INTERVIEW CHAT ---
-            with tab2:
-                if r['chat_history_json']:
-                    history = json.loads(r['chat_history_json'])
-                    with st.container(height=400):
-                        for msg in history:
-                            with st.chat_message(msg['role']): st.write(msg['content'])
-                else: st.write("No chat history available.")
-
-            # --- TAB 3: SYSTEM AUDIT LOGS ---
-            with tab3:
-                if r['audit_logs_json']:
-                    logs = json.loads(r['audit_logs_json'])
-                    for log in logs: 
-                        with st.expander(f"{log['icon']} {log.get('time', '')} - {log['label']}"):
-                            if log['is_json'] and isinstance(log['content'], dict):
-                                for key, value in log['content'].items():
-                                    st.markdown(f"**{key.replace('_', ' ').title()}:** {value}")
-                            else: st.write(log['content'])
-
-            # --- TAB 4: REFERENCE CHECKS ---
-            with tab4:
-                references = st.session_state.db.get_references_by_candidate(r['candidate_id'])
-                if references:
-                    for idx, ref in enumerate(references):
-                        status_color = "🟢" if ref['status'] == 'completed' else "⏳"
-                        with st.expander(f"{status_color} Reference {idx+1}: {ref['referee_name']} ({ref['referee_designation']})"):
-                            st.write(f"**Contact:** {ref['referee_email']}")
-                            if ref['chat_history_json']:
-                                ref_history = json.loads(ref['chat_history_json'])
-                                st.markdown("##### AI Verification Chat")
-                                with st.container(height=300):
-                                    for msg in ref_history:
-                                        with st.chat_message(msg['role']): st.write(msg['content'])
-                            elif ref['status'] == 'pending':
-                                st.info("Invitation sent. Waiting for referee.")
-                else: st.write("No references requested yet.")
-
-            # --- TAB 5: THE NEW EXECUTIVE SUMMARY & FINAL DECISION ---
-            with tab5:
+                # 2. Middle: Executive Summary
                 if raw_status in ["evaluated", "admit", "reject", "conditional"] and r['final_verdict_json']:
                     verdict = json.loads(r['final_verdict_json'])
                     
                     st.subheader("AI Committee Executive Summary")
                     st.info(f"**AI Recommendation:** {verdict.get('overall_recommendation', 'N/A')}")
                     
-                    # 1. The Full Picture (Chair Summary)
-                    st.markdown("#### 🏛️ Department Chair Summary")
                     st.write(verdict.get("executive_summary", "Detailed summary pending new Evaluation Engine format."))
                     
-                    # 2. Strengths & Weaknesses
                     colS, colW = st.columns(2)
                     with colS:
                         st.markdown("#### 📈 Key Strengths")
@@ -148,7 +110,6 @@ def render_admin_portal():
                     
                     st.divider()
                     
-                    # 3. The 5 Specialists
                     st.markdown("#### 🧠 Specialist Sub-Reports")
                     specialists = verdict.get("specialists", {
                         "Academic Auditor": "Pending new engine format.",
@@ -163,7 +124,7 @@ def render_admin_portal():
                     
                     st.divider()
 
-                    # 4. OFFICIAL HUMAN OVERRIDE / FINAL DECISION
+                    # 3. Bottom: OFFICIAL HUMAN OVERRIDE / FINAL DECISION
                     if raw_status == "evaluated":
                         st.markdown("### ⚖️ Official Administrative Action")
                         st.markdown("Please review the application file above. This action is final and will instantly update the student's portal.")
@@ -184,5 +145,43 @@ def render_admin_portal():
                     else:
                         st.success(f"### Final Administrative Decision Logged: {display_status}")
                 
-                elif raw_status in ["pending_references", "collecting_references"]:
-                    st.warning("Evaluation generation is paused pending completion of all reference checks.")
+                elif raw_status in ["pending_references", "collecting_references", "interviewing"]:
+                    st.warning("Executive Summary generation is paused pending completion of candidate assessments and reference checks.")
+
+            # --- TAB 2: INTERVIEW CHAT ---
+            with tab2:
+                if r['chat_history_json']:
+                    history = json.loads(r['chat_history_json'])
+                    with st.container(height=400):
+                        for msg in history:
+                            with st.chat_message(msg['role']): st.write(msg['content'])
+                else: st.write("No chat history available.")
+
+            # --- TAB 3: REFERENCE CHECKS ---
+            with tab3:
+                references = st.session_state.db.get_references_by_candidate(r['candidate_id'])
+                if references:
+                    for idx, ref in enumerate(references):
+                        status_color = "🟢" if ref['status'] == 'completed' else "⏳"
+                        with st.expander(f"{status_color} Reference {idx+1}: {ref['referee_name']} ({ref['referee_designation']})"):
+                            st.write(f"**Contact:** {ref['referee_email']}")
+                            if ref['chat_history_json']:
+                                ref_history = json.loads(ref['chat_history_json'])
+                                st.markdown("##### AI Verification Chat")
+                                with st.container(height=300):
+                                    for msg in ref_history:
+                                        with st.chat_message(msg['role']): st.write(msg['content'])
+                            elif ref['status'] == 'pending':
+                                st.info("Invitation sent. Waiting for referee.")
+                else: st.write("No references requested yet.")
+
+            # --- TAB 4: SYSTEM AUDIT LOGS ---
+            with tab4:
+                if r['audit_logs_json']:
+                    logs = json.loads(r['audit_logs_json'])
+                    for log in logs: 
+                        with st.expander(f"{log['icon']} {log.get('time', '')} - {log['label']}"):
+                            if log['is_json'] and isinstance(log['content'], dict):
+                                for key, value in log['content'].items():
+                                    st.markdown(f"**{key.replace('_', ' ').title()}:** {value}")
+                            else: st.write(log['content'])
