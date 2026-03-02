@@ -207,6 +207,12 @@ class EvaluationEngine:
         }
         
         avg_score = sum(sub_scores.values()) / 5.0
+        scores_list = list(sub_scores.values())
+        max_disagreement = max(scores_list) - min(scores_list)
+
+        # Base confidence is 100%. For every 1 point of disagreement between the highest and lowest specialist, subtract 5%.
+        # Example: If Technical is 3 and Motivation is 9, delta is 6. Confidence drops by 30% to 70%.
+        calculated_confidence = 100 - (max_disagreement * 5)
 
         # 2. Trigger the Committee Debate
         prof_critique = self._agent_strict_professor(sub_scores)
@@ -238,6 +244,7 @@ class EvaluationEngine:
         OUTPUT JSON FORMAT:
         {{
             "overall_recommendation": "Admit" | "Conditional Admit" | "Reject",
+            "system_confidence_score": {calculated_confidence},
             "executive_summary": "A powerful 3-4 sentence summary from your perspective as the Chair. Weigh the candidate's core strengths, address the committee debate, and justify your final recommendation.",
             "strengths": ["Bullet point 1", "Bullet point 2", "Bullet point 3"],
             "weaknesses": ["Bullet point 1", "Bullet point 2", or None if none available],
@@ -247,7 +254,6 @@ class EvaluationEngine:
                 "Technical SME": "**Score: {sub_scores['technical']}/10** - {tech_eval.get('detailed_analysis')} *(Proof: \"{tech_eval.get('direct_quote')}\")*",
                 "Academic Auditor": "**Score: {sub_scores['transcript']}/10** - {trans_eval.get('detailed_analysis')} *(Proof: \"{trans_eval.get('direct_quote')}\")*",
                 "Reference Cross-Checker": "**Score: {sub_scores['references']}/10** - {ref_eval.get('detailed_analysis')} *(Proof: \"{ref_eval.get('direct_quote')}\")*",
-            "system_confidence_score": "Percentage 0-100 indicating how confident the AI is in this assessment based on the clarity of the interview.",
             "risk_and_anomalies": ["List any contradictions, highly adversarial references, or areas where the candidate's dialect/communication style may have confused the AI.", "If none, output 'No anomalies detected.'"],
             }}
         }}
