@@ -110,61 +110,70 @@ def render_referee_portal():
     elif st.session_state.get("referee_phase") == "interview":
         st.title("⚖️ Candidate Endorsement Interview")
         
+        # 1. Draw the existing chat history
         for msg in st.session_state.ref_chat:
             with st.chat_message(msg[0]):
                 st.markdown(msg[1])
 
-        user_input = st.chat_input("Type your detailed response here...", disabled=st.session_state.ref_processing)
-        
-        if user_input and not st.session_state.ref_processing:
-            st.session_state.ref_processing = True
-            st.session_state.ref_chat.append(("user", user_input))
-            
-            with st.chat_message("user"):
-                st.markdown(user_input)
-                
-            with st.spinner("Analyzing response and verifying claims..."):
-                history_to_pass = st.session_state.ref_chat[:-1] 
-                res = st.session_state.ref_engine.generate_response(history_to_pass, user_input)
-                
-                st.session_state.ref_chat.append(("assistant", res["question"]))
-                st.session_state.ref_processing = False
-                
-                if res.get("is_complete"):
-                    # 1. Save the Reference
-                    st.session_state.db.complete_reference(st.session_state.current_ref_id, st.session_state.ref_chat)
-                    
-                    # 2. THE DOMINO EFFECT: Check if we should trigger the final evaluation
-                    is_ready, ref_logs = st.session_state.db.check_references_completed(st.session_state.current_candidate_id)
-                    
-                    if is_ready:
-                        # Fetch the candidate's full profile silently
-                        c_data = st.session_state.db.get_candidate_for_evaluation(st.session_state.current_candidate_id)
-                        user_data = json.loads(c_data['user_data_json'])
-                        chat_hist = json.loads(c_data['chat_history_json'])
-                        audit_logs = json.loads(c_data['audit_logs_json'])
-                        
-                        # Spin up the Evaluation Engine
-                        evaluator = EvaluationEngine(c_data['transcript_report'], chat_hist, user_data, ref_logs)
-                        final_verdict = evaluator.generate_final_scorecard()
-                        
-                        # Log it
-                        audit_logs.append({"icon": "🏛️", "label": "Final Verdict", "content": final_verdict, "is_json": True, "time": time.strftime("%H:%M:%S")})
-                        
-                        # Generate the PDF
-                        pdf_bytes, _ = generate_evaluation_pdf(
-                            user_data, 
-                            final_verdict, 
-                            audit_logs,
-                            transcript_bytes=c_data.get('transcript_blob'),
-                            ielts_bytes=c_data.get('ielts_blob')
-                        )
-                        
-                        # Save everything to the database!
-                        st.session_state.db.update_final_verdict(st.session_state.current_candidate_id, final_verdict, audit_logs, pdf_bytes)
+        # 2. DETERMINE WHOSE TURN IT IS
+        waiting_for_ai = len(st.session_state.ref_chat) > 0 and st.session_state.ref_chat[-1][0] == "user"
 
-                    st.session_state.referee_phase = "completed"
-                st.rerun()
+        # 3. DRAW THE INPUT
+        user_input = st.chat_input("Type your detailed response here...", disabled=waiting_for_ai)
+        
+        # 4. HANDLE REFEREE INPUT
+        if not waiting_for_ai and user_input:
+            st.session_state.ref_chat.append(("user", user_input))
+            st.rerun()
+            
+        # 5. HANDLE AI PROCESSING
+        if waiting_for_ai:
+            with st.chat_message("assistant"):
+                with st.spinner("Analyzing response and verifying claims..."):
+                    # Extract the user's latest message
+                    user_text = st.session_state.ref_chat[-1][1]
+                    history_to_pass = st.session_state.ref_chat[:-1] 
+                    
+                    res = st.session_state.ref_engine.generate_response(history_to_pass, user_text)
+                    
+                    st.session_state.ref_chat.append(("assistant", res["question"]))
+                    
+                    if res.get("is_complete"):
+                        # 1. Save the Reference
+                        st.session_state.db.complete_reference(st.session_state.current_ref_id, st.session_state.ref_chat)
+                        
+                        # 2. THE DOMINO EFFECT: Check if we should trigger the final evaluation
+                        is_ready, ref_logs = st.session_state.db.check_references_completed(st.session_state.current_candidate_id)
+                        
+                        if is_ready:
+                            # Fetch the candidate's full profile silently
+                            c_data = st.session_state.db.get_candidate_for_evaluation(st.session_state.current_candidate_id)
+                            user_data = json.loads(c_data['user_data_json'])
+                            chat_hist = json.loads(c_data['chat_history_json'])
+                            audit_logs = json.loads(c_data['audit_logs_json'])
+                            
+                            # Spin up the Evaluation Engine
+                            evaluator = EvaluationEngine(c_data['transcript_report'], chat_hist, user_data, ref_logs)
+                            final_verdict = evaluator.generate_final_scorecard()
+                            
+                            # Log it
+                            audit_logs.append({"icon": "🏛️", "label": "Final Verdict", "content": final_verdict, "is_json": True, "time": time.strftime("%H:%M:%S")})
+                            
+                            # Generate the PDF
+                            pdf_bytes, _ = generate_evaluation_pdf(
+                                user_data, 
+                                final_verdict, 
+                                audit_logs,
+                                transcript_bytes=c_data.get('transcript_blob'),
+                                ielts_bytes=c_data.get('ielts_blob')
+                            )
+                            
+                            # Save everything to the database!
+                            st.session_state.db.update_final_verdict(st.session_state.current_candidate_id, final_verdict, audit_logs, pdf_bytes)
+
+                        st.session_state.referee_phase = "completed"
+                    
+                    st.rerun()
 
     # ==========================================
     # PHASE 3: COMPLETION

@@ -10,14 +10,18 @@ OTHER_COUNTRIES = ["India", "China", "Brazil", "Nigeria", "Pakistan", "Banglades
 ALL_COUNTRIES = sorted(EXEMPT_COUNTRIES + OTHER_COUNTRIES)
 
 def handle_login_routing(username):
-    """Checks the database to see if the user has already applied or abandoned."""
+    """Checks the database to route the user to their correct application phase."""
     app_record = st.session_state.db.get_application_by_username(username)
     
     if not app_record:
         st.session_state.phase = "intake"
-    elif app_record['status'] == 'evaluated':
+    elif app_record['status'] in ['evaluated', 'admit', 'reject', 'conditional']:
         st.session_state.phase = "completed"
-        st.session_state.saved_verdict = json.loads(app_record['final_verdict_json'])
+        st.session_state.final_status = app_record['status'] # Save the Admin's DB status
+        if app_record.get('final_verdict_json'):
+            st.session_state.saved_verdict = json.loads(app_record['final_verdict_json'])
+        else:
+            st.session_state.saved_verdict = {}
     elif app_record['status'] == 'pending_references':
         st.session_state.phase = "pending_references"
     else:
@@ -208,51 +212,64 @@ def render_student_portal():
     elif st.session_state.phase == "interview":
         st.title("🎙️ Admissions Interview")
         
+        if "last_processed_audio" not in st.session_state: 
+            st.session_state.last_processed_audio = None
+
+        # 1. Draw the existing chat history
         for msg in st.session_state.chat_display:
             with st.chat_message(msg[0]):
                 st.markdown(msg[1])
-                if len(msg) == 3 and msg[2]: st.audio(msg[2])
+                if len(msg) == 3 and msg[2]: 
+                    st.audio(msg[2])
 
-        if "last_processed_audio" not in st.session_state: 
-            st.session_state.last_processed_audio = None
-            
-        if "is_processing" not in st.session_state:
-            st.session_state.is_processing = False
+        # 2. DETERMINE WHOSE TURN IT IS
+        # If the last message is from the user, we are waiting for the AI.
+        waiting_for_ai = len(st.session_state.chat_display) > 0 and st.session_state.chat_display[-1][0] == "user"
 
-        audio_input = st.audio_input("🎤 Speak (Optional)", key=f"mic_{len(st.session_state.chat_display)}", disabled=st.session_state.is_processing)
-        text_input = st.chat_input("Type response...", disabled=st.session_state.is_processing)
+        # 3. DRAW THE INPUTS (Disabled if AI is thinking)
+        audio_input = st.audio_input("🎤 Speak (Optional)", key=f"mic_{len(st.session_state.chat_display)}", disabled=waiting_for_ai)
+        user_text = st.chat_input("Type response...", disabled=waiting_for_ai)
 
-        user_input = text_input
-        if audio_input and audio_input != st.session_state.last_processed_audio:
-            with st.spinner("Transcribing..."):
-                user_input = st.session_state.audio_processor.transcribe_audio(audio_input.getvalue())
-                st.session_state.last_processed_audio = audio_input
+        # 4. HANDLE USER INPUT (Only executes if inputs are enabled)
+        if not waiting_for_ai:
+            final_input = None
+            if audio_input and audio_input != st.session_state.last_processed_audio:
+                with st.spinner("Transcribing..."):
+                    final_input = st.session_state.audio_processor.transcribe_audio(audio_input.getvalue())
+                    st.session_state.last_processed_audio = audio_input
+            elif user_text:
+                final_input = user_text
 
-        if user_input and not st.session_state.is_processing:
-            st.session_state.is_processing = True 
-            
-            st.session_state.chat_display.append(("user", user_input))
-            st.session_state.audit_logs.append({"icon": "👤", "label": "User", "content": user_input, "is_json": False, "time": time.strftime("%H:%M:%S")})
-
-            with st.chat_message("user"):
-                st.markdown(user_input)
-
-            with st.spinner("Analyzing..."):
-                res = st.session_state.interview_engine.generate_response(user_input)
-                ai_text = res["question"]
-                ai_audio = st.session_state.audio_processor.generate_audio(ai_text)
-                
-                st.session_state.audit_logs.append({"icon": "🧠", "label": "AI Reasoning", "content": {"eval": res.get("evaluation")}, "is_json": True, "time": time.strftime("%H:%M:%S")})
-                st.session_state.chat_display.append(("assistant", ai_text, ai_audio))
-                st.session_state.audit_logs.append({"icon": "🤖", "label": "AI Question", "content": ai_text, "is_json": False, "time": time.strftime("%H:%M:%S")})
-                
-                st.session_state.db.sync_to_db(st.session_state.candidate_id, st.session_state.chat_display, st.session_state.audit_logs)
-
-                st.session_state.is_processing = False 
-
-                if res.get("is_complete"):
-                    st.session_state.phase = "references" # 🔴 ROUTE TO REFERENCES NOW
+            if final_input:
+                # Save input and instantly rerun to gray out the chat box
+                st.session_state.chat_display.append(("user", final_input))
+                st.session_state.audit_logs.append({"icon": "👤", "label": "User", "content": final_input, "is_json": False, "time": time.strftime("%H:%M:%S")})
                 st.rerun()
+
+        # 5. HANDLE AI PROCESSING
+        if waiting_for_ai:
+            with st.chat_message("assistant"):
+                with st.spinner("🧠 AI is analyzing your response..."):
+                    # Grab the exact text the user just submitted
+                    latest_user_text = st.session_state.chat_display[-1][1]
+                    
+                    res = st.session_state.interview_engine.generate_response(latest_user_text)
+                    ai_text = res["question"]
+                    ai_audio = st.session_state.audio_processor.generate_audio(ai_text)
+                    
+                    # Log everything safely
+                    st.session_state.audit_logs.append({"icon": "🧠", "label": "AI Reasoning", "content": {"eval": res.get("evaluation")}, "is_json": True, "time": time.strftime("%H:%M:%S")})
+                    st.session_state.chat_display.append(("assistant", ai_text, ai_audio))
+                    st.session_state.audit_logs.append({"icon": "🤖", "label": "AI Question", "content": ai_text, "is_json": False, "time": time.strftime("%H:%M:%S")})
+                    
+                    # Sync database
+                    st.session_state.db.sync_to_db(st.session_state.candidate_id, st.session_state.chat_display, st.session_state.audit_logs)
+                    
+                    # Route to references if done, otherwise rerun to unlock the text box
+                    if res.get("is_complete"):
+                        st.session_state.phase = "references"
+                    
+                    st.rerun()
 
     # ==========================================
     # PHASE 4: REFERENCES FORM
@@ -301,9 +318,9 @@ def render_student_portal():
         st.title("⏳ Decision Pending")
         st.info("Your application is currently paused pending reference verification.")
         st.markdown("""
-        We have dispatched requests to your listed references. They have up to **7 business days** to securely submit their endorsements via the Referee Portal.
+        We have dispatched secure requests to your listed references. They have up to **7 business days** to submit their professional endorsements via the Referee Portal.
         
-        Once all references are received and processed by our Verification Engine, the committee debate will conclude and your final status will automatically update here.
+        Once all references are received and verified by our system, your complete application file will be forwarded to the Admissions Committee for final review. You will be officially notified of their decision through this portal.
         """)
         
         st.divider()
@@ -312,58 +329,36 @@ def render_student_portal():
             st.rerun()
 
     # ==========================================
-    # EDGE CASE 1: ALREADY COMPLETED
+    # EDGE CASE 1: ALREADY COMPLETED / UNDER REVIEW
     # ==========================================
     elif st.session_state.phase == "completed":
-        st.title("🏛️ Application Complete")
-        st.info("You have already completed the admissions process for this cycle.")
+        st.title("🏛️ Application Status")
         
-        verdict = st.session_state.saved_verdict
-        decision = verdict.get("overall_recommendation", "Unknown")
+        db_status = st.session_state.final_status.lower()
         
-        if decision == "Admit":
-            st.success(f"**Final Status: {decision}** 🎉")
-        elif decision == "Conditional Admission":
-            st.warning(f"**Final Status: {decision}** ⚠️")
-        else:
-            st.error(f"**Final Status: {decision}** 🛑")
+        if db_status == "evaluated":
+            st.info("Your application is currently Under Review by the Admissions Committee.")
+            st.markdown("All references have been received and your file is complete. You will be notified here once the committee makes a final decision.")
             
-        st.divider()
-        
-        with st.container(border=True):
-            st.subheader("Official Correspondence")
-            
-            if decision == "Reject":
-                # Find the weakest area to give constructive feedback (ignoring references)
-                sub_scores = verdict.get("sub_scores", {})
-                if isinstance(sub_scores, str):
-                    try:
-                        sub_scores = json.loads(sub_scores)
-                    except:
-                        sub_scores = {}
-                
-                safe_scores = {k: v for k, v in sub_scores.items() if k != 'references' and isinstance(v, (int, float))}
-                
-                feedback_phrase = "foundational technical and academic skills" # Default fallback
-                if safe_scores:
-                    weakest_trait = min(safe_scores, key=safe_scores.get)
-                    area_map = {
-                        "technical": "technical methodologies and problem-solving framework",
-                        "motivation": "articulating a highly specific research focus",
-                        "trajectory": "alignment between your past academic trajectory and future goals",
-                        "transcript": "academic fundamentals relevant to this rigorous program"
-                    }
-                    feedback_phrase = area_map.get(weakest_trait, feedback_phrase)
-
-                st.write(f"Thank you for taking the time to apply and complete our rigorous assessment process. While we recognize your efforts and potential, we are unable to offer you admission at this time. To strengthen future applications, we recommend continuing to develop your {feedback_phrase}. We wish you the absolute best in your future academic endeavors.")
-            
-            elif decision == "Admit":
+        elif db_status == "admit":
+            st.success("**Final Status: Admitted** 🎉")
+            with st.container(border=True):
+                st.subheader("Official Correspondence")
                 st.write("Congratulations! We are thrilled to offer you admission. Your combined assessment results prove you will be an exceptional addition to our academic community.")
-            
-            else:
+                
+        elif db_status == "reject":
+            st.error("**Final Status: Rejected** 🛑")
+            with st.container(border=True):
+                st.subheader("Official Correspondence")
+                st.write("Thank you for taking the time to apply and complete our rigorous assessment process. While we recognize your efforts and potential, we are unable to offer you admission at this time. We wish you the absolute best in your future academic endeavors.")
+                
+        elif db_status == "conditional":
+            st.warning("**Final Status: Conditional Admission** ⚠️")
+            with st.container(border=True):
+                st.subheader("Official Correspondence")
                 st.write("Thank you for your application. We are pleased to offer you Conditional Admission. You demonstrated strong potential, but this offer is contingent upon completing specific foundational bridge courses to fully align your background with our program's academic rigor.")
 
-        st.write("")
+        st.divider()
         if st.button("Log Out", use_container_width=True):
             st.session_state.clear()
             st.rerun()
