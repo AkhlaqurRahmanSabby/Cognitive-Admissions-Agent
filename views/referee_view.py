@@ -119,8 +119,8 @@ def render_referee_portal():
         waiting_for_ai = len(st.session_state.ref_chat) > 0 and st.session_state.ref_chat[-1][0] == "user"
 
         # 3. DRAW THE INPUT
-        user_input = st.chat_input("Type your detailed response here...", disabled=waiting_for_ai)
-        
+        user_input = st.chat_input("Type your detailed response here...", max_chars=2000, disabled=waiting_for_ai)
+
         # 4. HANDLE REFEREE INPUT
         if not waiting_for_ai and user_input:
             st.session_state.ref_chat.append(("user", user_input))

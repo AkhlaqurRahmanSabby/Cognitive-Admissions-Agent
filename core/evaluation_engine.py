@@ -221,7 +221,7 @@ class EvaluationEngine:
         # 3. The Final Decision (The "Department Chair")
         role = "You are the Chair of Graduate Admissions. You must synthesize the verifiable specialist data and the committee debate into a final Executive Summary."
         task = f"""
-        You are finalizing the application file for {self.user_data.get('name')}.
+        You are finalizing the application file for an Anonymized Applicant.
         
         SPECIALIST VERIFICATIONS (Average: {avg_score}/10):
         1. Behavioral Psychologist (Vision): {sub_scores['motivation']}/10 - {focus_eval.get('detailed_analysis')} | Quote: "{focus_eval.get('direct_quote')}"
@@ -253,9 +253,9 @@ class EvaluationEngine:
                 "Program Alignment Director": "**Score: {sub_scores['trajectory']}/10** - {traj_eval.get('detailed_analysis')} *(Proof: \"{traj_eval.get('direct_quote')}\")*",
                 "Technical SME": "**Score: {sub_scores['technical']}/10** - {tech_eval.get('detailed_analysis')} *(Proof: \"{tech_eval.get('direct_quote')}\")*",
                 "Academic Auditor": "**Score: {sub_scores['transcript']}/10** - {trans_eval.get('detailed_analysis')} *(Proof: \"{trans_eval.get('direct_quote')}\")*",
-                "Reference Cross-Checker": "**Score: {sub_scores['references']}/10** - {ref_eval.get('detailed_analysis')} *(Proof: \"{ref_eval.get('direct_quote')}\")*",
-            "risk_and_anomalies": ["List any contradictions, highly adversarial references, or areas where the candidate's dialect/communication style may have confused the AI.", "If none, output 'No anomalies detected.'"],
-            }}
+                "Reference Cross-Checker": "**Score: {sub_scores['references']}/10** - {ref_eval.get('detailed_analysis')} *(Proof: \"{ref_eval.get('direct_quote')}\")*"
+            }},
+            "risk_and_anomalies": ["List any contradictions, highly adversarial references, or areas where the candidate's dialect/communication style may have confused the AI.", "If none, output 'No anomalies detected.'"]
         }}
         """
         

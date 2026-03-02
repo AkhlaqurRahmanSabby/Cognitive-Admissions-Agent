@@ -232,7 +232,7 @@ def render_student_portal():
 
         # 3. DRAW THE INPUTS (Disabled if AI is thinking)
         audio_input = st.audio_input("🎤 Speak (Optional)", key=f"mic_{len(st.session_state.chat_display)}", disabled=waiting_for_ai)
-        user_text = st.chat_input("Type response...", disabled=waiting_for_ai)
+        user_text = st.chat_input("Type response...", max_chars=2000, disabled=waiting_for_ai)
 
         # 4. HANDLE USER INPUT (Only executes if inputs are enabled)
         if not waiting_for_ai:
