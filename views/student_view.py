@@ -194,6 +194,7 @@ def render_student_portal():
                 init_res = st.session_state.interview_engine.start_interview()
                 audio = st.session_state.audio_processor.generate_audio(init_res["question"])
                 st.session_state.chat_display.append(("assistant", init_res["question"], audio))
+                st.session_state.audit_logs.append({"icon": "🤖", "label": "AI Question", "content": init_res["question"], "is_json": False, "time": time.strftime("%H:%M:%S")})
                 
                 st.session_state.db.sync_to_db(st.session_state.candidate_id, st.session_state.chat_display, st.session_state.audit_logs)
                 st.session_state.phase = "interview"
@@ -243,6 +244,7 @@ def render_student_portal():
                 
                 st.session_state.audit_logs.append({"icon": "🧠", "label": "AI Reasoning", "content": {"eval": res.get("evaluation")}, "is_json": True, "time": time.strftime("%H:%M:%S")})
                 st.session_state.chat_display.append(("assistant", ai_text, ai_audio))
+                st.session_state.audit_logs.append({"icon": "🤖", "label": "AI Question", "content": ai_text, "is_json": False, "time": time.strftime("%H:%M:%S")})
                 
                 st.session_state.db.sync_to_db(st.session_state.candidate_id, st.session_state.chat_display, st.session_state.audit_logs)
 
