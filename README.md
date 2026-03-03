@@ -95,7 +95,16 @@ To experience the full Human-in-the-Loop architecture, we recommend simulating a
 
 1. **The Applicant:** Select the "Student Applicant" view. Create a test account, upload a sample PDF transcript, and complete the live AI interview. At the end, submit a dummy reference email.
 2. **The Referee:** Log out and switch to the "Referee" view. Create an account using the dummy email you just provided. Complete the AI reference verification chat.
-3. **The Administrator:** Log out and switch to the "School Admin" view. You will now see the fully generated Executive Summary, complete with specialist sub-reports, verifiable quotes, and the final Admit/Reject override buttons.
+3. **The Administrator:** Log out and switch to the "School Admin" view.
+
+### Admin Access (Local Demo Only)
+
+> **Demo Admin Password:** `wealthsimple2026`
+>
+> This static password is provided solely for demonstration.  
+> In a production deployment, this would be replaced with secure authentication and role-based access control.
+
+You will now see the fully generated Executive Summary, complete with specialist sub-reports, verifiable quotes, and the final Admit/Reject override buttons.
 
 ## 📁 Project Structure
 
