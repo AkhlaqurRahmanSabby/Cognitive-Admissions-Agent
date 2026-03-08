@@ -1,6 +1,8 @@
 # 🎓 Cognitive Admissions Agent
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Available_Now-success?style=for-the-badge&logo=streamlit)](https://cognitive-admissions-agent.streamlit.app/)
+&nbsp;&nbsp;&nbsp;&nbsp;
+[![YouTube Demo](https://img.shields.io/badge/Video_Demo-Watch_on_YouTube-red?style=for-the-badge&logo=youtube)](https://youtu.be/L49TjL9gMzU?si=sA5cSR8DQAKX4egC)
 
 University admissions is a legacy batch-processing workflow constrained by human review capacity. This project rebuilds admissions as an AI-native system where applicants are evaluated through live cognitive interviews and automatically verified credentials rather than static applications. 
 
