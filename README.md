@@ -99,7 +99,7 @@ To experience the full Human-in-the-Loop architecture, we recommend simulating a
 
 ### Admin Access (Local Demo Only)
 
-> **Demo Admin Password:** `wealthsimple2026`
+> **Demo Admin Password:** `demo_admin`
 >
 > This static password is provided solely for demonstration.  
 > In a production deployment, this would be replaced with secure authentication and role-based access control.
