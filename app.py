@@ -35,8 +35,8 @@ with st.sidebar:
         
         # --- ADMIN SECURITY GATE ---
         if user_role == "School Admin":
-            pwd = st.text_input("Admin Password", type="password", help="Hint: wealthsimple2026")
-            if pwd != "wealthsimple2026":
+            pwd = st.text_input("Admin Password", type="password", help="Hint: demo_admin")
+            if pwd != "demo_admin":
                 st.warning("🔒 Please enter the correct admin password to access the Command Center.")
                 st.stop() # Stops the rest of the app from loading until password is correct
             else:
