@@ -1,6 +1,6 @@
 # 🎓 Cognitive Admissions Agent
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-Available_Now-success?style=for-the-badge&logo=streamlit)](https://cognitive-admissions-agent.streamlit.app/)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Hosted_on_Azure-0078D4?style=for-the-badge&logo=microsoftazure)](https://cognitive-admissions-agent.azurewebsites.net)
 &nbsp;&nbsp;&nbsp;&nbsp;
 [![YouTube Demo](https://img.shields.io/badge/Video_Demo-Watch_on_YouTube-red?style=for-the-badge&logo=youtube)](https://youtu.be/L49TjL9gMzU?si=sA5cSR8DQAKX4egC)
 
