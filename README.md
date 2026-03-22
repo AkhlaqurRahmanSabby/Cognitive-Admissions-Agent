@@ -55,6 +55,31 @@ AI does the heavy lifting of data extraction, cognitive assessment, and synthesi
 
 ---
 
+## Deployment
+
+This application is containerized with Docker and deployed on **Azure App Service** (Canada Central).
+
+- **Live URL:** [cognitive-admissions-agent.azurewebsites.net](https://cognitive-admissions-agent.azurewebsites.net)
+- **Container Registry:** Azure Container Registry (sabbyportfolioacr)
+- **Azure-Ready LLM Client:** The `ai_client.py` is architected to support both standard OpenAI and Azure OpenAI via environment variables; requiring no code changes to switch providers.
+
+To deploy your own instance to Azure:
+```bash
+# 1. Build and push the secure container image
+docker build -t your-acr.azurecr.io/cognitive-admissions-agent:v1 .
+docker push your-acr.azurecr.io/cognitive-admissions-agent:v1
+
+# 2. Create the Azure Web App
+az webapp create --resource-group your-rg --plan your-plan \
+  --name your-app --deployment-container-image-name your-acr.azurecr.io/cognitive-admissions-agent:v1
+
+# 3. Expose the Streamlit port and inject environment variables
+az webapp config appsettings set --resource-group your-rg --name your-app \
+  --settings WEBSITES_PORT=8501 OPENAI_API_KEY="your-api-key"
+```
+
+---
+
 ## Local Installation & Setup
 
 Follow these steps to run the Cognitive Admissions Agent on your local machine.
