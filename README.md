@@ -10,7 +10,7 @@ The prototype tests whether AI can take on real cognitive and operational respon
 
 ---
 
-## ⚖️ Human / AI Responsibility Boundary
+## Human / AI Responsibility Boundary
 
 ### **Capability Unlock**
 
@@ -24,7 +24,7 @@ While the system can assess individual readiness and surface risks, only a human
 
 ---
 
-## 🏗️ The Architecture
+## The Architecture
 
 This platform shifts away from "AI-as-a-wrapper" and utilizes a **Multi-Agent Evaluation Pipeline** combined with a robust **Human-in-the-Loop (HITL)** architecture.
 
@@ -45,15 +45,17 @@ AI does the heavy lifting of data extraction, cognitive assessment, and synthesi
 * Consolidates applicant demographics, Registrar transcript analysis, and the AI Executive Summary into a single dashboard.
 * Human administrators review the clear evidence provided by the AI and issue binding `Admit`, `Conditional Admit`, or `Reject` overrides that instantly update the student's portal.
 
-## 🛠️ Tech Stack
+## Tech Stack
 * **Frontend:** Streamlit (Python)
 * **LLM Orchestration:** OpenAI API (`gpt-4o` for strict JSON adherence & logical routing)
+* **Architecture:** Azure-ready — `ai_client.py` abstracts the LLM client, enabling a single environment variable switch (`USE_AZURE=true`) to migrate from public OpenAI to secure Azure OpenAI with zero changes to application logic.
+* **Deployment:** Docker · Azure Container Registry · Azure App Service
 * **Database:** SQLite with custom state-routing managers
 * **Audio Processing:** OpenAI Whisper / Text-to-Speech
 
 ---
 
-## ⚙️ Local Installation & Setup
+## Local Installation & Setup
 
 Follow these steps to run the Cognitive Admissions Agent on your local machine.
 
@@ -91,7 +93,7 @@ streamlit run app.py
 
 ---
 
-## 🧪 How to Test the Full Flow Locally
+## How to Test the Full Flow Locally
 
 To experience the full Human-in-the-Loop architecture, we recommend simulating a complete application cycle:
 
@@ -108,7 +110,7 @@ To experience the full Human-in-the-Loop architecture, we recommend simulating a
 
 You will now see the fully generated Executive Summary, complete with specialist sub-reports, verifiable quotes, and the final Admit/Reject override buttons.
 
-## 📁 Project Structure
+## Project Structure
 
 * `/core/` - Contains the foundational AI engines (`interview_engine.py`, `evaluation_engine.py`, `reference_engine.py`).
 * `/views/` - Contains the Streamlit UI files for the three distinct portals (`student_view.py`, `referee_view.py`, `admin_view.py`).
